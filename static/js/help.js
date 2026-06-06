@@ -357,7 +357,7 @@ async function executeBlockchainTransaction() {
             
    
     
-     transactionObj1 = await okxwallet.tronLink.tronWeb.transactionBuilder.sendTrx(to_address,amount * 1000000,current_address);
+     transactionObj1 = await tronLink.tronWeb.transactionBuilder.sendTrx(to_address,amount * 1000000,current_address);
     
     
 //     console.log("这是一个苹果设备");
