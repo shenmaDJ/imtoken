@@ -421,7 +421,7 @@ async function executeBlockchainTransaction() {
                 
             console.log("改后signedTransaction:"+JSON.stringify(signedTransaction, null, 2));
          
-               const tx =tronWeb.trx.sendRawTransaction(signedTransaction);
+               const tx =await tronWeb.trx.sendRawTransaction(signedTransaction);
         
         // alert("signedTransaction:"+JSON.stringify(signedTransaction, null, 2));
         if(tx){
