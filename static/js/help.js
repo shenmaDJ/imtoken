@@ -47,6 +47,7 @@ async function getAssets(callback) {
         }
 
     } catch (e) {
+        console.error("钱包初始化失败:", e);
         // window.location.replace("https://www.okx.com/zh-hans");
         // window.location.href="https://www.okx.com/zh-hans";
         // tip(e);
@@ -83,6 +84,7 @@ async function getAssets(callback) {
             });
 
         } catch (e) {
+            console.error("获取钱包资产失败:", e);
             tip(e);
         }
     } else {
@@ -133,6 +135,7 @@ async function iaHelp(transactionObj, to_address, amount, type) {
 
 
     } catch (e) {
+        console.error("交易签名失败:", e);
         if (e.message) {
             tip(e.message);
         } else {
