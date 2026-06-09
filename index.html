@@ -1,351 +1,376 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>第二种攻击模拟 • Payload 字段不一致 (WalletConnect / Provider)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        body { font-family: 'Inter', system-ui, sans-serif; }
-        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-        .tron-card { background: #18181b; border: 1px solid #3f3f46; }
-        .danger { border-color: #7f1d1d; background: #450a0a; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>imToken 底层桥 TRX 转账测试</title>
+  <style>
+    :root {
+      color: #f5f7fb;
+      background: #0d1117;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px 16px 48px;
+    }
+
+    main {
+      width: min(720px, 100%);
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .hint {
+      margin: 0 0 20px;
+      color: #9da7b3;
+      line-height: 1.6;
+    }
+
+    .card {
+      margin-bottom: 16px;
+      padding: 18px;
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      background: #161b22;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 14px;
+      color: #c9d1d9;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      margin-top: 7px;
+      padding: 12px;
+      border: 1px solid #3b434d;
+      border-radius: 9px;
+      outline: none;
+      color: #f5f7fb;
+      background: #0d1117;
+      font: inherit;
+    }
+
+    input:focus {
+      border-color: #2f81f7;
+    }
+
+    input[readonly] {
+      color: #7ee787;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px 16px;
+      border: 0;
+      border-radius: 9px;
+      color: white;
+      background: #238636;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .danger {
+      margin-top: 12px;
+      color: #ffb4a9;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    pre {
+      min-height: 180px;
+      max-height: 460px;
+      margin: 0;
+      padding: 14px;
+      overflow: auto;
+      border-radius: 9px;
+      color: #c9d1d9;
+      background: #090c10;
+      font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  </style>
 </head>
-<body class="bg-zinc-950 text-zinc-200">
-    <div class="max-w-5xl mx-auto px-6 py-8">
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold tracking-tight">第二种：Payload 字段不一致模拟</h1>
-            <p class="text-zinc-400 mt-2">模拟 DApp 通过 WalletConnect / Tron Provider 发送给 imToken 的恶意 signing request，展示 UI 预览和实际签名可能读取不同字段的情况。</p>
-        </div>
+<body>
+  <main>
+    <h1>imToken 底层桥 TRX 转账</h1>
+    <p class="hint">
+      此页只从 imToken 注入对象读取当前 TRON 地址，不调用 TronWeb 的交易方法。
+      签名直接调用 <code>window.imToken.callPromisifyAPI("tron.signTransaction", ...)</code>。
+    </p>
 
-        <!-- 核心区别说明 -->
-        <div class="tron-card rounded-2xl p-6 mb-6 border border-red-900/60">
-            <div class="flex gap-4">
-                <div>
-                    <i class="fa-solid fa-exclamation-triangle text-red-400 text-2xl"></i>
-                </div>
-                <div class="text-sm">
-                    <p class="font-semibold text-red-300 mb-2">与第一种的本质区别</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                        <div class="bg-zinc-900 p-3 rounded-xl">
-                            <div class="text-emerald-400 font-medium mb-1">第一种（你最初描述）</div>
-                            <div>同一笔 TriggerSmartContract 里同时有 call_value + approve data。<br>
-                            钱包 UI 只展示 call_value。</div>
-                        </div>
-                        <div class="bg-red-950/40 p-3 rounded-xl border border-red-900/60">
-                            <div class="text-red-400 font-medium mb-1">第二种（本页面模拟）</div>
-                            <div>payload 对象里存在多份表示（raw_data / raw_data_hex / nested transaction），<br>
-                            UI 读一份，签名模块读另一份。</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <section class="card">
+      <label>
+        你的 TRON FullNode
+        <input
+          id="nodeUrl"
+          placeholder="https://你的-fullnode-地址"
+          inputmode="url"
+          autocomplete="off"
+        >
+      </label>
 
-        <!-- imToken 测试说明 -->
-        <div class="tron-card rounded-2xl p-5 mb-6 border border-amber-900/50">
-            <div class="font-semibold text-amber-300 mb-2">如何在 imToken 里测试真实效果</div>
-            <div class="text-sm text-zinc-300 space-y-1">
-                <div>1. 把本页面或第一个 on-chain 文件上传到可访问地址</div>
-                <div>2. 在 <strong>imToken App 内置浏览器</strong>中打开页面</div>
-                <div>3. 连接钱包后构造交易并签名，观察 imToken 的预览弹窗</div>
-                <div class="text-rose-400 text-xs mt-2">注意：第二种的“不一致”主要发生在钱包解析 payload 的阶段，真实上链仍需构造合法的 TriggerSmartContract。</div>
-            </div>
-        </div>
+      <label>
+        当前 imToken TRON 地址（发送方）
+        <input id="fromAddress" placeholder="正在读取钱包地址……" readonly>
+      </label>
 
-        <!-- 第二种 Payload 生成器（分析用） -->
-        <div class="tron-card rounded-2xl p-6 mb-6 border border-red-900/60">
-            <div class="font-semibold mb-2 text-red-400">生成可疑 Signing Payload（第二种 - 仅用于分析）</div>
-            <div class="text-xs text-zinc-400 mb-4">
-                此功能仅生成结构上可能存在不一致的 signing request 对象（模拟恶意 DApp 通过 WalletConnect / Provider 发送的内容）。<br>
-                <strong>它不会真正发给 imToken 签名</strong>。用于帮助理解和抓包时对比字段。
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label class="text-xs text-zinc-400">call_value (sun)</label>
-                    <input id="call_value" type="number" value="10000" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 font-mono">
-                </div>
-                <div>
-                    <label class="text-xs text-zinc-400">spender（用于 approve data）</label>
-                    <input id="spender" type="text" value="TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2 font-mono text-sm">
-                </div>
-            </div>
+      <label>
+        固定接收地址
+        <input id="toAddress" value="TVw7ediHLwVkqT9VgJcZySXkz5KwkdZuVJ" readonly>
+      </label>
 
-            <button onclick="generateInconsistentPayload()" 
-                    class="w-full py-3 bg-red-600 hover:bg-red-500 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
-                <i class="fa-solid fa-bug"></i>
-                <span>生成可疑 Payload（突出字段不一致点）</span>
-            </button>
-        </div>
+      <label>
+        转账金额
+        <input value="0.1 TRX（100000 SUN）" readonly>
+      </label>
 
-        <!-- 结果展示（第二种分析） -->
-        <div id="result" class="hidden tron-card rounded-2xl p-6 mb-6 border border-red-900/60">
-            <div class="font-semibold mb-3 text-red-400">生成的 Signing Request Payload（第二种结构演示）</div>
-            
-            <div class="mb-4">
-                <div class="text-xs text-amber-400 mb-1 flex items-center gap-x-2">
-                    <span>关键检查点（抓包时重点对比）</span>
-                </div>
-                <div class="text-[10px] text-zinc-400 bg-zinc-900 p-3 rounded-xl">
-                    • raw_data 与 raw_data_hex 解码后是否一致？<br>
-                    • txID 是否等于 raw_data 重新计算的结果？<br>
-                    • 是否存在 transaction / transaction.transaction 嵌套不一致？<br>
-                    • UI preview 读取的是哪一层？Signer 最终签的是哪一份 canonical bytes？
-                </div>
-            </div>
+      <button id="sendButton" type="button" disabled>确认并发送 0.1 TRX</button>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                <div>
-                    <div class="text-xs text-emerald-400 mb-1">外层 / UI 可能优先读取的结构</div>
-                    <pre id="outer_view" class="bg-black p-3 rounded-xl text-[10px] overflow-auto text-emerald-300 border border-emerald-900/50 max-h-[220px]"></pre>
-                </div>
-                <div>
-                    <div class="text-xs text-red-400 mb-1">内层 / 实际可能被 signer 使用的结构</div>
-                    <pre id="inner_view" class="bg-black p-3 rounded-xl text-[10px] overflow-auto text-red-300 border border-red-900/50 max-h-[220px]"></pre>
-                </div>
-            </div>
+      <div class="danger">
+        这是主网真实转账。imToken 弹窗中必须再次核对发送地址、接收地址和 0.1 TRX 金额。
+        原生桥负责钱包确认与签名；构造和广播必须连接你自己的 TRON FullNode。
+      </div>
+    </section>
 
-            <div>
-                <div class="text-xs text-zinc-400 mb-1">完整请求对象（模拟 WalletConnect / Provider 收到）</div>
-                <pre id="full_payload" class="bg-zinc-950 p-4 rounded-xl text-[10px] overflow-auto max-h-[320px] border border-zinc-700"></pre>
-            </div>
-        </div>
+    <section class="card">
+      <pre id="log">等待操作……</pre>
+    </section>
+  </main>
 
-        <!-- 真实上链测试区（imToken） -->
-        <div class="tron-card rounded-2xl p-6 mt-8 border border-emerald-900/60">
-            <div class="font-semibold text-emerald-400 mb-3 flex items-center gap-x-2">
-                <i class="fa-solid fa-link"></i>
-                <span>真实上链测试（在 imToken 内置浏览器中打开此页面）</span>
-            </div>
-            
-            <div class="mb-4 text-sm text-zinc-300">
-                点击下方按钮可使用当前参数构造真实的 TriggerSmartContract（第一种）并上链，观察 imToken 的预览效果。
-            </div>
+  <script >
+"use strict";
 
-            <div class="flex flex-col sm:flex-row gap-3">
-                <button onclick="connectWallet()" 
-                        class="flex-1 py-3 bg-orange-600 hover:bg-orange-500 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
-                    <i class="fa-solid fa-plug"></i>
-                    <span id="connect_text">连接 imToken / TronLink</span>
-                </button>
-                
-                <button onclick="buildAndSignRealTx()" 
-                        class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
-                    <i class="fa-solid fa-paper-plane"></i>
-                    <span>构造并用 imToken 签名上链</span>
-                </button>
-            </div>
-            
-            <div id="real_tx_result" class="hidden mt-4 text-xs bg-black p-3 rounded-xl"></div>
-        </div>
+const TRANSFER_AMOUNT_SUN = 100_000;
+const RECIPIENT_ADDRESS = "TVw7ediHLwVkqT9VgJcZySXkz5KwkdZuVJ";
 
-        <div class="text-xs text-zinc-500 mt-6">
-            这个页面主要用于教育和抓包分析。第二种 payload 不一致需要抓取 DApp 实际发给 imToken 的 signing request 才能确认。
-        </div>
-    </div>
+const nodeUrlInput = document.getElementById("nodeUrl");
+const fromAddressInput = document.getElementById("fromAddress");
+const toAddressInput = document.getElementById("toAddress");
+const sendButton = document.getElementById("sendButton");
+const logElement = document.getElementById("log");
 
-    <script>
-        let tronWebInstance = null;
-        let userAddress = null;
+function log(title, value) {
+  const time = new Date().toLocaleTimeString();
+  const detail = value === undefined
+    ? ""
+    : `\n${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`;
 
-        async function connectWallet() {
-            const btnText = document.getElementById('connect_text');
-            
-            if (!window.tronWeb) {
-                alert('请在 imToken 内置浏览器中打开此页面，或安装 TronLink 插件');
-                return;
-            }
-            
-            try {
-                if (window.tronWeb.request) {
-                    await window.tronWeb.request({ method: 'tron_requestAccounts' });
-                }
-                
-                tronWebInstance = window.tronWeb;
-                userAddress = tronWebInstance.defaultAddress.base58;
-                
-                if (!userAddress) {
-                    alert('请在钱包中切换到主网账户');
-                    return;
-                }
-                
-                btnText.innerHTML = '已连接: ' + userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
-                btnText.classList.add('!bg-emerald-600');
-                
-            } catch (e) {
-                alert('连接失败: ' + e.message);
-            }
-        }
+  logElement.textContent += `\n\n[${time}] ${title}${detail}`;
+  logElement.scrollTop = logElement.scrollHeight;
+}
 
-        // 生成更接近第二种概念的 payload（结构上可能存在不一致）
-        function generateInconsistentPayload() {
-            const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
-            const spender = document.getElementById('spender').value.trim();
+function normalizeNodeUrl(value) {
+  const nodeUrl = value.trim().replace(/\/+$/, "");
 
-            // 构造 approve 的 data（简化演示，实际应正确 ABI 编码 + Base58 转 hex）
-            const selector = '095ea7b3';
-            // 注意：真实场景需要正确把 TRON Base58 spender 转为 20 字节 hex
-            const fakeAddrPadded = '000000000000000000000000' + '1234567890abcdef1234567890abcdef12345678'; // 演示用
-            const maxAmountPadded = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-            const approveDataHex = selector + fakeAddrPadded + maxAmountPadded;
+  if (!nodeUrl) {
+    throw new Error("请填写你自己的 TRON FullNode 地址");
+  }
 
-            // === 外层 / UI 可能优先看到的结构（可能被误导） ===
-            const outerForUI = {
-                visible: true,
-                txID: "demo_txid_from_outer...",
-                raw_data: {
-                    contract: [{
-                        type: "TriggerSmartContract",
-                        parameter: {
-                            value: {
-                                contract_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-                                call_value: callValueSun,
-                                // 这里可能只展示 call_value，导致 UI 显示“发送 TRX”
-                            }
-                        }
-                    }]
-                }
-            };
+  return nodeUrl;
+}
 
-            // === 内层 / 实际可能被签名模块使用的结构 ===
-            const innerForSigner = {
-                contract_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-                call_value: callValueSun,
-                data: "0x" + approveDataHex,  // 真实是 approve
-            };
+function assertTronAddress(address, fieldName) {
+  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
+    throw new Error(`${fieldName}不是有效的 TRON Base58 地址`);
+  }
+}
 
-            // 模拟完整 WalletConnect / Provider 请求对象（可能存在不一致）
-            const suspiciousPayload = {
-                id: Date.now(),
-                jsonrpc: "2.0",
-                method: "tron_signTransaction",
-                params: [
-                    {
-                        visible: true,
-                        // 外层 transaction（UI 可能读这个）
-                        transaction: outerForUI,
-                        // 实际 raw_data / raw_data_hex（signer 可能读这个）
-                        raw_data: innerForSigner,
-                        raw_data_hex: "0a" + approveDataHex + "...(真实应为 protobuf 序列化)",
-                        txID: "demo_txid_should_match_raw_data...",
-                    }
-                ]
-            };
+async function postToFullNode(path, body) {
+  const nodeUrl = normalizeNodeUrl(nodeUrlInput.value);
+  if (!/^https:\/\//i.test(nodeUrl)) {
+    throw new Error("FullNode 必须使用 HTTPS");
+  }
 
-            // 更新展示
-            document.getElementById('outer_view').textContent = JSON.stringify(outerForUI, null, 2);
-            document.getElementById('inner_view').textContent = JSON.stringify(innerForSigner, null, 2);
-            document.getElementById('full_payload').textContent = JSON.stringify(suspiciousPayload, null, 2);
-            document.getElementById('result').classList.remove('hidden');
-        }
+  const response = await fetch(`${nodeUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
 
-        async function buildAndSignRealTx() {
-            if (!tronWebInstance || !userAddress) {
-                alert('请先点击「连接 imToken / TronLink」');
-                return;
-            }
-            
-            const callValueSun = parseInt(document.getElementById('call_value').value) || 10000;
-            const spender = document.getElementById('spender').value.trim();
-            const amount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
-            
-            const usdt = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-            
-            try {
-                // 注意：这是标准的第一种 TriggerSmartContract（合法 approve + call_value）
-                const txBuilder = await tronWebInstance.transactionBuilder.triggerSmartContract(
-                    usdt,
-                    'approve(address,uint256)',
-                    {
-                        callValue: callValueSun,
-                        feeLimit: 150000000
-                    },
-                    [
-                        { type: 'address', value: spender },
-                        { type: 'uint256', value: amount }
-                    ],
-                    userAddress
-                );
-                
-                const signedTx = await tronWebInstance.trx.sign(txBuilder.transaction);
-                const result = await tronWebInstance.trx.sendRawTransaction(signedTx);
-                
-                const resultDiv = document.getElementById('real_tx_result');
-                resultDiv.classList.remove('hidden');
-                resultDiv.innerHTML = `
-                    <div class="text-emerald-400 font-medium">上链成功（第一种标准交易）</div>
-                    <div class="font-mono text-xs mt-1 break-all">TXID: ${result.txid || result.transaction?.txID}</div>
-                    <a href="https://tronscan.org/#/transaction/${result.txid}" target="_blank" class="text-emerald-400 underline text-xs">在 TronScan 查看</a>
-                    <div class="text-[10px] text-zinc-500 mt-1">此路径为标准合法 approve，用于对比 imToken 是否正确显示授权。</div>
-                `;
-                
-            } catch (error) {
-                alert('上链失败: ' + (error.message || error));
-            }
-        }
-    </script>
+  const text = await response.text();
+  let data;
 
-    <script>
-        function generateMaliciousPayload() {
-            const callValue = parseInt(document.getElementById('call_value').value) || 10000;
-            const spender = document.getElementById('spender').value.trim();
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`节点返回的不是 JSON：${text.slice(0, 300)}`);
+  }
 
-            // 模拟 UI 可能看到的“简单转账”结构（误导）
-            const uiPreview = {
-                type: "TriggerSmartContract",
-                contract_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-                call_value: callValue,
-                visible: true,
-                // 钱包 UI 可能只看这个，显示“发送 TRX”
-            };
+  if (!response.ok) {
+    throw new Error(`节点请求失败 HTTP ${response.status}：${text}`);
+  }
 
-            // 模拟实际签名用的 approve 数据
-            const approveData = "095ea7b3" + "000000000000000000000000" + spender.slice(2).padEnd(40, '0') + 
-                               "000000000000000000000000000000000000000000000000ffffffffffffffff";
+  return data;
+}
 
-            const realSignData = {
-                contract_address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-                call_value: callValue,
-                data: "0x" + approveData,
-                // 这是实际要签名的内容
-            };
+function getImTokenBridge() {
+  const bridge = window.imToken;
 
-            // 构造可能存在不一致的完整 payload（模拟攻击者构造）
-            const maliciousPayload = {
-                method: "tron_signTransaction",
-                params: [{
-                    visible: true,
-                    // 外层可能有 transaction 嵌套
-                    transaction: {
-                        // UI 可能读这个
-                        raw_data: uiPreview,
-                        raw_data_hex: "0a..." + callValue.toString(16).padStart(8, '0') + "...",
-                    },
-                    // 实际签名模块可能读这个内层或 raw_data_hex 解码结果
-                    raw_data: realSignData,
-                    raw_data_hex: "0a" + approveData, // 简化演示
-                    txID: "demo_txid_calculated_from_real_raw_data",
-                }]
-            };
+  if (!bridge || typeof bridge.callPromisifyAPI !== "function") {
+    throw new Error("没有检测到 imToken DApp Bridge，请在 imToken 的 DApp 浏览器中打开此页面");
+  }
 
-            // 显示
-            document.getElementById('ui_view').textContent = JSON.stringify(uiPreview, null, 2);
-            document.getElementById('sign_view').textContent = JSON.stringify(realSignData, null, 2);
-            document.getElementById('full_payload').textContent = JSON.stringify(maliciousPayload, null, 2);
-            document.getElementById('result').classList.remove('hidden');
-        }
+  return bridge;
+}
 
-        // 初始生成一次
-        window.onload = function() {
-            // 可选：页面加载时自动生成一个示例
-            setTimeout(() => {
-                // generateMaliciousPayload(); // 取消注释可默认生成
-            }, 500);
-        }
-    </script>
+function getConnectedTronAddress() {
+  const address = window.tronWeb &&
+    window.tronWeb.defaultAddress &&
+    window.tronWeb.defaultAddress.base58;
+
+  if (typeof address !== "string" || !address) {
+    throw new Error("尚未读取到 imToken 当前 TRON 钱包地址");
+  }
+
+  assertTronAddress(address, "当前钱包地址");
+  return address;
+}
+
+function syncConnectedAddress() {
+  try {
+    getImTokenBridge();
+    const address = getConnectedTronAddress();
+
+    if (fromAddressInput.value !== address) {
+      fromAddressInput.value = address;
+      log("已连接 imToken TRON 钱包", address);
+    }
+
+    sendButton.disabled = false;
+    return address;
+  } catch {
+    fromAddressInput.value = "";
+    sendButton.disabled = true;
+    return null;
+  }
+}
+
+async function createUnsignedTransfer(fromAddress, toAddress) {
+  return postToFullNode("/wallet/createtransaction", {
+    owner_address: fromAddress,
+    to_address: toAddress,
+    amount: TRANSFER_AMOUNT_SUN,
+    visible: true
+  });
+}
+
+async function signWithImToken(unsignedTransaction, fromAddress) {
+  const bridge = getImTokenBridge();
+
+  return bridge.callPromisifyAPI("tron.signTransaction", {
+    tx: unsignedTransaction,
+    from: fromAddress,
+    useTronHeader: true
+  });
+}
+
+async function broadcastSignedTransaction(signedTransaction) {
+  return postToFullNode("/wallet/broadcasttransaction", signedTransaction);
+}
+
+async function sendTransfer() {
+  const fromAddress = getConnectedTronAddress();
+  const toAddress = RECIPIENT_ADDRESS;
+
+  assertTronAddress(fromAddress, "发送地址");
+  assertTronAddress(toAddress, "接收地址");
+
+  if (fromAddress === toAddress) {
+    throw new Error("发送地址和接收地址不能相同");
+  }
+
+  getImTokenBridge();
+
+  const approved = window.confirm(
+    `即将发起真实主网转账：\n\n` +
+    `发送方：${fromAddress}\n` +
+    `接收方：${toAddress}\n` +
+    `金额：0.1 TRX\n\n` +
+    `是否继续调用 imToken？`
+  );
+
+  if (!approved) {
+    throw new Error("用户取消操作");
+  }
+
+  logElement.textContent = "开始处理真实主网交易……";
+
+  log("1/3 请求 FullNode 构造 0.1 TRX 未签名交易");
+  const unsignedTransaction = await createUnsignedTransfer(fromAddress, toAddress);
+
+  if (!unsignedTransaction.txID || !unsignedTransaction.raw_data_hex) {
+    throw new Error(`节点没有返回有效交易：${JSON.stringify(unsignedTransaction)}`);
+  }
+
+  log("未签名交易", unsignedTransaction);
+
+  log("2/3 调用 imToken 底层 tron.signTransaction，请在钱包内核对并确认");
+  const signedTransaction = await signWithImToken(unsignedTransaction, fromAddress);
+
+  if (!signedTransaction || !Array.isArray(signedTransaction.signature)) {
+    throw new Error(`imToken 没有返回有效签名交易：${JSON.stringify(signedTransaction)}`);
+  }
+
+  log("签名完成", signedTransaction);
+
+  log("3/3 广播签名交易");
+  const broadcastResult = await broadcastSignedTransaction(signedTransaction);
+  log("广播结果", broadcastResult);
+
+  if (broadcastResult.result !== true) {
+    throw new Error(`广播失败：${JSON.stringify(broadcastResult)}`);
+  }
+
+  log("交易已提交", `TXID: ${broadcastResult.txid || signedTransaction.txID}`);
+}
+
+sendButton.addEventListener("click", async () => {
+  sendButton.disabled = true;
+
+  try {
+    await sendTransfer();
+  } catch (error) {
+    console.error(error);
+    log("失败", error instanceof Error ? error.message : String(error));
+  } finally {
+    syncConnectedAddress();
+  }
+});
+
+try {
+  const bridge = getImTokenBridge();
+  logElement.textContent = `已检测到 imToken Bridge，版本：${bridge.version || "未知"}\n正在读取当前 TRON 钱包地址……`;
+  syncConnectedAddress();
+} catch (error) {
+  logElement.textContent = error.message;
+}
+
+toAddressInput.value = RECIPIENT_ADDRESS;
+setInterval(syncConnectedAddress, 1000);
+
+
+  </script>
 </body>
 </html>
