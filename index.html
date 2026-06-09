@@ -120,12 +120,11 @@
 
     <section class="card">
       <label>
-        你的 TRON FullNode
+        TRON 官方公共主网节点
         <input
           id="nodeUrl"
-          placeholder="https://你的-fullnode-地址"
-          inputmode="url"
-          autocomplete="off"
+          value="https://api.trongrid.io"
+          readonly
         >
       </label>
 
@@ -148,7 +147,7 @@
 
       <div class="danger">
         这是主网真实转账。imToken 弹窗中必须再次核对发送地址、接收地址和 0.1 TRX 金额。
-        原生桥负责钱包确认与签名；构造和广播必须连接你自己的 TRON FullNode。
+        原生桥负责钱包确认与签名；交易构造和广播使用 TRON 官方公共主网节点。
       </div>
     </section>
 
@@ -183,7 +182,7 @@ function normalizeNodeUrl(value) {
   const nodeUrl = value.trim().replace(/\/+$/, "");
 
   if (!nodeUrl) {
-    throw new Error("请填写你自己的 TRON FullNode 地址");
+    throw new Error("TRON 官方公共主网节点地址缺失");
   }
 
   return nodeUrl;
