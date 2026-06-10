@@ -2,556 +2,260 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>imToken 交易原生桥 API 测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>imToken 交易接口简单测试</title>
   <style>
-    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      padding: 16px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #0b1020;
       color: #e5e7eb;
+      padding: 16px;
+      margin: 0;
     }
+
     h1 {
       font-size: 22px;
-      margin: 0 0 12px;
+      margin-bottom: 12px;
     }
-    h2 {
-      font-size: 17px;
-      margin: 22px 0 10px;
-    }
-    .card {
+
+    .box {
       background: #111827;
       border: 1px solid #243044;
       border-radius: 12px;
       padding: 14px;
-      margin: 12px 0;
+      margin-bottom: 14px;
     }
-    .row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-      margin: 8px 0;
-    }
+
     button {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+      padding: 12px;
       border: 0;
       border-radius: 8px;
-      padding: 10px 12px;
       background: #2563eb;
-      color: #fff;
-      font-size: 14px;
+      color: white;
+      font-size: 15px;
       cursor: pointer;
+      text-align: left;
     }
-    button.ok { background: #059669; }
-    button.warn { background: #b45309; }
-    button.danger { background: #b91c1c; }
-    button.gray { background: #374151; }
-    button:disabled {
-      opacity: .45;
-      cursor: not-allowed;
+
+    button:hover {
+      background: #1d4ed8;
     }
-    input, textarea, select {
+
+    button.danger {
+      background: #b91c1c;
+    }
+
+    button.danger:hover {
+      background: #991b1b;
+    }
+
+    textarea, pre {
       width: 100%;
-      border-radius: 8px;
-      border: 1px solid #374151;
+      box-sizing: border-box;
       background: #030712;
       color: #e5e7eb;
+      border: 1px solid #374151;
+      border-radius: 8px;
       padding: 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-family: Consolas, Monaco, monospace;
       font-size: 13px;
-    }
-    textarea {
-      min-height: 160px;
-    }
-    pre {
       white-space: pre-wrap;
       word-break: break-word;
-      background: #030712;
-      border: 1px solid #243044;
-      padding: 12px;
-      border-radius: 10px;
-      max-height: 520px;
+    }
+
+    textarea {
+      min-height: 120px;
+    }
+
+    pre {
+      min-height: 220px;
+      max-height: 500px;
       overflow: auto;
-      font-size: 12px;
-      line-height: 1.5;
     }
-    label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin: 4px 8px 4px 0;
-      font-size: 13px;
-      color: #d1d5db;
-    }
-    input[type="checkbox"] {
-      width: auto;
-    }
-    .small {
+
+    .tip {
       color: #9ca3af;
       font-size: 13px;
       line-height: 1.6;
     }
-    .tag {
-      display: inline-block;
-      padding: 3px 7px;
-      border-radius: 999px;
-      font-size: 12px;
-      margin: 2px;
-      background: #374151;
+
+    .ok {
+      color: #34d399;
     }
-    .tag.ok { background: #065f46; }
-    .tag.fail { background: #7f1d1d; }
-    .tag.warn { background: #78350f; }
-    .api-box {
-      border: 1px solid #243044;
-      border-radius: 10px;
-      padding: 10px;
-      margin: 8px 0;
-      background: #0f172a;
+
+    .fail {
+      color: #f87171;
     }
-    .api-name {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      color: #bfdbfe;
-      font-size: 13px;
-      margin-bottom: 5px;
+
+    .warn {
+      color: #fbbf24;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-    .dangerText { color: #fca5a5; }
-    .warnText { color: #fbbf24; }
-    .okText { color: #34d399; }
   </style>
 </head>
 <body>
-  <h1>imToken 交易原生桥 API 测试</h1>
+  <h1>imToken 交易原生接口简单测试</h1>
 
-  <div class="card">
-    <div class="small">
-      这个页面只测试交易相关的 <b>callPromisifyAPI</b> 接口。
-      默认“空 payload 探测”不会构造真实交易。
-      如果你粘贴真实 payload，可能会触发钱包签名、转账、广播等确认页，请只用于自己的钱包和测试环境。
-    </div>
-
-    <div class="row">
-      <button onclick="detectEnv()">检测环境</button>
-      <button class="ok" onclick="runEmptyProbeAll()">空 payload 探测全部</button>
-      <button class="warn" onclick="runSelectedWithCustomPayload()">用自定义 payload 测选中接口</button>
-      <button class="gray" onclick="copyLog()">复制日志</button>
-      <button class="danger" onclick="clearLog()">清空日志</button>
+  <div class="box">
+    <div class="tip">
+      用 imToken DApp 浏览器打开这个页面。<br>
+      默认 payload 是 <code>{}</code>，点击下面接口按钮会直接调用：
+      <code>window.imToken.callPromisifyAPI(apiName, payload)</code>
+      <br><br>
+      注意：如果你填入真实交易 payload，某些接口可能会弹签名、转账或广播确认页。
     </div>
   </div>
 
-  <div class="card">
-    <h2>环境信息</h2>
-    <div id="envTags"></div>
-    <pre id="envInfo">未检测</pre>
+  <div class="box">
+    <h3>当前 payload</h3>
+    <textarea id="payload">{
+  
+}</textarea>
   </div>
 
-  <div class="card">
-    <h2>选择要测试的接口</h2>
-    <div id="apiList"></div>
+  <div class="box">
+    <h3>点击接口直接测试</h3>
+
+    <button onclick="testApi('transaction.signTransaction')">
+      transaction.signTransaction
+    </button>
+
+    <button onclick="testApi('transaction.tokenPay')">
+      transaction.tokenPay
+    </button>
+
+    <button onclick="testApi('wallet_addEthereumChain')">
+      wallet_addEthereumChain
+    </button>
+
+    <button onclick="testApi('tron.sendTransaction')" class="danger">
+      tron.sendTransaction
+    </button>
+
+    <button onclick="testApi('tron.signTransaction')" class="danger">
+      tron.signTransaction
+    </button>
+
+    <button onclick="testApi('tron.signMessage')" class="danger">
+      tron.signMessage
+    </button>
+
+    <button onclick="testApi('tron.broadcastTransaction')" class="danger">
+      tron.broadcastTransaction
+    </button>
   </div>
 
-  <div class="card">
-    <h2>自定义 payload</h2>
-    <div class="small">
-      这里可以粘贴你自己构造好的 payload。  
-      空 payload 探测不需要填。  
-      如果是真实交易 payload，建议先只测试一个接口、一个包装格式。
-    </div>
-
-    <div class="row">
-      <textarea id="payloadInput" placeholder='例如：{"tx":{...}} 或 {"raw_data":{...},"raw_data_hex":"..."}'>{}</textarea>
-    </div>
-
-    <h2>payload 包装格式</h2>
-    <div class="small">
-      有些原生桥不是直接吃 payload，而是吃 <code>{tx: payload}</code>、<code>{transaction: payload}</code> 这类格式。
-      所以下面可以选择不同包装方式测试。
-    </div>
-
-    <div id="wrapperList"></div>
-
-    <div class="row">
-      <label>
-        <input type="checkbox" id="confirmEveryCall" checked />
-        每次调用前都弹确认
-      </label>
-      <label>
-        <input type="checkbox" id="stopOnWalletPopup" checked />
-        遇到疑似钱包弹窗/用户取消后停止后续测试
-      </label>
-    </div>
+  <div class="box">
+    <button onclick="detectEnv()">检测环境</button>
+    <button onclick="clearLog()">清空日志</button>
   </div>
 
-  <div class="card">
-    <h2>单接口手动调用</h2>
-    <div class="grid">
-      <select id="manualApi"></select>
-      <select id="manualWrapper"></select>
-      <button class="warn" onclick="runManualOne()">只测试这一个</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>日志</h2>
+  <div class="box">
+    <h3>日志</h3>
     <pre id="log"></pre>
   </div>
 
 <script>
-(function () {
-  const $ = (id) => document.getElementById(id);
-
-  const API_LIST = [
-    {
-      name: "transaction.signTransaction",
-      group: "旧版官方交易签名接口",
-      risk: "sign",
-      note: "旧接口，部分版本可能已移除。用于探测是否还存在。"
-    },
-    {
-      name: "transaction.tokenPay",
-      group: "旧版 tokenPay 候选接口",
-      risk: "pay",
-      note: "旧版资料里出现过，可能用于代币支付/交易确认。"
-    },
-    {
-      name: "wallet_addEthereumChain",
-      group: "EVM 添加链接口",
-      risk: "chain",
-      note: "可能会触发添加链确认。空参数一般会报参数错误。"
-    },
-    {
-      name: "tron.sendTransaction",
-      group: "TRON 非公开候选接口",
-      risk: "send",
-      note: "非公开稳定接口，测试是否被 native bridge 识别。"
-    },
-    {
-      name: "tron.signTransaction",
-      group: "TRON 非公开候选接口",
-      risk: "sign",
-      note: "非公开稳定接口，测试是否支持 TRON 交易签名。"
-    },
-    {
-      name: "tron.signMessage",
-      group: "TRON 非公开候选接口",
-      risk: "sign",
-      note: "非公开稳定接口，测试是否支持 TRON 消息签名。"
-    },
-    {
-      name: "tron.broadcastTransaction",
-      group: "TRON 非公开候选接口",
-      risk: "broadcast",
-      note: "危险：如果 payload 是已签名交易，可能广播上链。"
-    }
-  ];
-
-  const WRAPPERS = [
-    {
-      id: "direct",
-      label: "直接传 payload",
-      build: (payload) => payload
-    },
-    {
-      id: "array_payload",
-      label: "[payload]",
-      build: (payload) => [payload]
-    },
-    {
-      id: "payload",
-      label: "{ payload: payload }",
-      build: (payload) => ({ payload })
-    },
-    {
-      id: "tx",
-      label: "{ tx: payload }",
-      build: (payload) => ({ tx: payload })
-    },
-    {
-      id: "transaction",
-      label: "{ transaction: payload }",
-      build: (payload) => ({ transaction: payload })
-    },
-    {
-      id: "data",
-      label: "{ data: payload }",
-      build: (payload) => ({ data: payload })
-    },
-    {
-      id: "params",
-      label: "{ params: payload }",
-      build: (payload) => ({ params: payload })
-    },
-    {
-      id: "rawTransaction",
-      label: "{ rawTransaction: payload }",
-      build: (payload) => ({ rawTransaction: payload })
-    },
-    {
-      id: "signedTransaction",
-      label: "{ signedTransaction: payload }",
-      build: (payload) => ({ signedTransaction: payload })
-    }
-  ];
-
-  const EMPTY_PROBE_PAYLOADS = [
-    {
-      id: "no_params",
-      label: "不传第二参数",
-      omitParams: true,
-      value: undefined
-    },
-    {
-      id: "undefined",
-      label: "第二参数 undefined",
-      omitParams: false,
-      value: undefined
-    },
-    {
-      id: "empty_object",
-      label: "{}",
-      omitParams: false,
-      value: {}
-    },
-    {
-      id: "empty_array",
-      label: "[]",
-      omitParams: false,
-      value: []
-    },
-    {
-      id: "empty_payload_object",
-      label: "{ payload: {} }",
-      omitParams: false,
-      value: { payload: {} }
-    },
-    {
-      id: "empty_tx_object",
-      label: "{ tx: {} }",
-      omitParams: false,
-      value: { tx: {} }
-    },
-    {
-      id: "empty_transaction_object",
-      label: "{ transaction: {} }",
-      omitParams: false,
-      value: { transaction: {} }
-    }
-  ];
-
-  const state = {
-    results: [],
-    env: null
-  };
-
-  function now() {
-    return new Date().toLocaleString();
-  }
-
-  function stringify(value) {
-    try {
-      if (typeof value === "undefined") return "undefined";
-      if (typeof value === "string") return value;
-      return JSON.stringify(value, null, 2);
-    } catch (e) {
-      return String(value);
-    }
-  }
-
-  function stringifyError(e) {
-    try {
-      if (!e) return null;
-      if (typeof e === "string") return e;
-      const out = {};
-      Object.getOwnPropertyNames(e).forEach(k => out[k] = e[k]);
-      if (e.code !== undefined) out.code = e.code;
-      if (e.message !== undefined) out.message = e.message;
-      return out;
-    } catch (_) {
-      return String(e);
-    }
-  }
-
   function log(...args) {
-    const text = args.map(stringify).join(" ");
-    $("log").textContent += `[${now()}] ${text}\n`;
-    $("log").scrollTop = $("log").scrollHeight;
-  }
+    const time = new Date().toLocaleTimeString();
 
-  window.clearLog = function () {
-    $("log").textContent = "";
-    state.results = [];
-  };
+    const text = args.map(item => {
+      if (typeof item === "string") return item;
 
-  function withTimeout(promise, ms) {
-    return Promise.race([
-      Promise.resolve(promise),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("调用超时 " + ms + "ms")), ms);
-      })
-    ]);
-  }
-
-  function getBridge() {
-    if (!window.imToken) {
-      throw new Error("window.imToken 不存在，请在 imToken DApp 浏览器中打开");
-    }
-
-    if (typeof window.imToken.callPromisifyAPI === "function") {
-      return {
-        name: "callPromisifyAPI",
-        call(apiName, params, omitParams) {
-          if (omitParams) {
-            return window.imToken.callPromisifyAPI(apiName);
-          }
-          return window.imToken.callPromisifyAPI(apiName, params);
-        }
-      };
-    }
-
-    if (typeof window.imToken.callAPI === "function") {
-      return {
-        name: "callAPI",
-        call(apiName, params, omitParams) {
-          return new Promise((resolve, reject) => {
-            try {
-              const cb = function (err, res) {
-                if (err) reject(err);
-                else resolve(res);
-              };
-
-              if (omitParams) {
-                window.imToken.callAPI(apiName, cb);
-              } else {
-                window.imToken.callAPI(apiName, params, cb);
-              }
-            } catch (e) {
-              reject(e);
-            }
-          });
-        }
-      };
-    }
-
-    throw new Error("window.imToken 存在，但 callPromisifyAPI / callAPI 都不存在");
-  }
-
-  function safeKeys(obj) {
-    try {
-      if (!obj) return [];
-      return Object.keys(obj).slice(0, 100);
-    } catch (e) {
-      return ["读取失败: " + (e.message || e)];
-    }
-  }
-
-  function tag(name, ok, warn) {
-    return `<span class="tag ${ok ? "ok" : warn ? "warn" : "fail"}">${name}: ${ok ? "存在" : "不存在"}</span>`;
-  }
-
-  window.detectEnv = function () {
-    const imToken = window.imToken || null;
-
-    const env = {
-      time: new Date().toISOString(),
-      href: location.href,
-      userAgent: navigator.userAgent,
-      imToken: imToken ? {
-        exists: true,
-        keys: safeKeys(imToken),
-        hasCallPromisifyAPI: typeof imToken.callPromisifyAPI === "function",
-        hasCallAPI: typeof imToken.callAPI === "function"
-      } : {
-        exists: false
-      },
-      ethereum: window.ethereum ? {
-        exists: true,
-        keys: safeKeys(window.ethereum),
-        chainId: window.ethereum.chainId,
-        selectedAddress: window.ethereum.selectedAddress,
-        isImToken: window.ethereum.isImToken,
-        isMetaMask: window.ethereum.isMetaMask
-      } : {
-        exists: false
-      },
-      tronWeb: window.tronWeb ? {
-        exists: true,
-        keys: safeKeys(window.tronWeb),
-        ready: window.tronWeb.ready,
-        defaultAddress: window.tronWeb.defaultAddress || null
-      } : {
-        exists: false
-      },
-      tron: window.tron ? {
-        exists: true,
-        keys: safeKeys(window.tron)
-      } : {
-        exists: false
-      },
-      tronLink: window.tronLink ? {
-        exists: true,
-        keys: safeKeys(window.tronLink)
-      } : {
-        exists: false
+      try {
+        return JSON.stringify(item, null, 2);
+      } catch (e) {
+        return String(item);
       }
-    };
+    }).join(" ");
 
-    state.env = env;
+    const logEl = document.getElementById("log");
+    logEl.textContent += `[${time}] ${text}\n\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
-    $("envTags").innerHTML = [
-      tag("window.imToken", !!window.imToken),
-      tag("callPromisifyAPI", !!(window.imToken && typeof window.imToken.callPromisifyAPI === "function")),
-      tag("callAPI", !!(window.imToken && typeof window.imToken.callAPI === "function")),
-      tag("window.ethereum", !!window.ethereum),
-      tag("window.tronWeb", !!window.tronWeb),
-      tag("window.tron", !!window.tron),
-      tag("window.tronLink", !!window.tronLink)
-    ].join("");
+  function clearLog() {
+    document.getElementById("log").textContent = "";
+  }
 
-    $("envInfo").textContent = JSON.stringify(env, null, 2);
-    log("环境检测完成", env);
+  function getPayload() {
+    const text = document.getElementById("payload").value.trim();
 
-    return env;
-  };
-
-  function classifyResult(result) {
-    if (result.ok) {
-      return "成功：接口可调用，注意如果是交易接口，可能已经触发钱包处理。";
+    if (!text) {
+      return {};
     }
 
-    const msg = String(
-      result.errorMessage ||
-      result.errorRaw && result.errorRaw.message ||
-      result.errorRaw ||
-      ""
-    ).toLowerCase();
-
-    if (
-      msg.includes("user rejected") ||
-      msg.includes("user cancel") ||
-      msg.includes("cancel") ||
-      msg.includes("rejected") ||
-      msg.includes("用户取消")
-    ) {
-      return "疑似已拉起钱包，用户取消：这个结果通常说明接口路径可能是通的。";
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error("payload 不是合法 JSON: " + e.message);
     }
+  }
+
+  function getImTokenBridge() {
+    if (!window.imToken) {
+      throw new Error("window.imToken 不存在，请在 imToken DApp 浏览器里打开");
+    }
+
+    if (typeof window.imToken.callPromisifyAPI !== "function") {
+      throw new Error("window.imToken.callPromisifyAPI 不存在");
+    }
+
+    return window.imToken.callPromisifyAPI;
+  }
+
+  async function testApi(apiName) {
+    log("开始测试接口:", apiName);
+
+    let payload;
+    let callPromisifyAPI;
+
+    try {
+      payload = getPayload();
+      callPromisifyAPI = getImTokenBridge();
+    } catch (e) {
+      log("❌ 准备失败:", e.message || e);
+      return;
+    }
+
+    log("发送 payload:", payload);
+
+    try {
+      const result = await callPromisifyAPI(apiName, payload);
+
+      log("✅ 调用成功:", apiName);
+      log("返回结果:", result);
+
+    } catch (e) {
+      log("❌ 调用失败:", apiName);
+
+      const err = {
+        name: e && e.name,
+        message: e && e.message,
+        code: e && e.code,
+        stack: e && e.stack,
+        raw: String(e)
+      };
+
+      log("错误信息:", err);
+      log("判断结果:", explainError(err.message || err.raw || ""));
+    }
+  }
+
+  function explainError(message) {
+    const msg = String(message || "").toLowerCase();
 
     if (
       msg.includes("no transaction payload") ||
       msg.includes("payload") ||
       msg.includes("raw_data") ||
       msg.includes("raw data") ||
-      msg.includes("invalid transaction") ||
       msg.includes("invalid params") ||
       msg.includes("missing")
     ) {
-      return "参数错误/缺少 payload：可能接口被识别到了，但当前参数格式不对。";
+      return "接口名可能被识别到了，但是 payload 格式不对或缺少交易数据";
     }
 
     if (
@@ -559,366 +263,61 @@
       msg.includes("not found") ||
       msg.includes("unsupported") ||
       msg.includes("not support") ||
-      msg.includes("does not exist") ||
       msg.includes("undefined")
     ) {
-      return "接口不存在或当前版本不支持。";
+      return "当前 imToken 版本大概率不支持这个接口";
+    }
+
+    if (
+      msg.includes("cancel") ||
+      msg.includes("rejected") ||
+      msg.includes("user denied") ||
+      msg.includes("用户取消")
+    ) {
+      return "可能已经拉起钱包确认页，但用户取消了";
     }
 
     if (
       msg.includes("wallet") ||
-      msg.includes("chain") ||
-      msg.includes("在该链下找不到此钱包")
+      msg.includes("在该链下找不到此钱包") ||
+      msg.includes("chain")
     ) {
-      return "接口可能被识别，但当前钱包链/账户环境不匹配。";
+      return "接口可能走到了钱包侧，但是当前链或钱包账户不匹配";
     }
 
-    return "未知错误，需要结合完整 error 判断。";
+    return "未知错误，需要看完整日志";
   }
 
-  async function callApi(apiName, params, options) {
-    const opt = options || {};
-    const started = Date.now();
+  function detectEnv() {
+    const info = {
+      url: location.href,
+      userAgent: navigator.userAgent,
 
-    let bridge;
-    try {
-      bridge = getBridge();
-    } catch (e) {
-      const result = {
-        ok: false,
-        apiName,
-        params,
-        wrapper: opt.wrapper || "",
-        bridge: null,
-        costMs: Date.now() - started,
-        errorMessage: e.message || String(e),
-        errorRaw: stringifyError(e)
-      };
-      result.classify = classifyResult(result);
-      state.results.push(result);
-      log("❌ bridge 获取失败", result);
-      return result;
-    }
+      hasWindowImToken: !!window.imToken,
+      hasCallPromisifyAPI: !!(
+        window.imToken &&
+        typeof window.imToken.callPromisifyAPI === "function"
+      ),
 
-    try {
-      log("开始调用", {
-        apiName,
-        wrapper: opt.wrapper || "",
-        bridge: bridge.name,
-        omitParams: !!opt.omitParams,
-        params
-      });
+      imTokenKeys: window.imToken ? Object.keys(window.imToken) : null,
 
-      const res = await withTimeout(
-        bridge.call(apiName, params, !!opt.omitParams),
-        opt.timeout || 30000
-      );
+      hasEthereum: !!window.ethereum,
+      ethereumKeys: window.ethereum ? Object.keys(window.ethereum) : null,
+      ethereumChainId: window.ethereum ? window.ethereum.chainId : null,
+      ethereumSelectedAddress: window.ethereum ? window.ethereum.selectedAddress : null,
 
-      const result = {
-        ok: true,
-        apiName,
-        params,
-        wrapper: opt.wrapper || "",
-        bridge: bridge.name,
-        costMs: Date.now() - started,
-        result: res
-      };
+      hasTronWeb: !!window.tronWeb,
+      tronWebReady: window.tronWeb ? window.tronWeb.ready : null,
+      tronWebDefaultAddress: window.tronWeb ? window.tronWeb.defaultAddress : null,
 
-      result.classify = classifyResult(result);
-      state.results.push(result);
-      log("✅ 调用成功", result);
-      return result;
-
-    } catch (e) {
-      const result = {
-        ok: false,
-        apiName,
-        params,
-        wrapper: opt.wrapper || "",
-        bridge: bridge.name,
-        costMs: Date.now() - started,
-        errorMessage: e && (e.message || String(e)),
-        errorRaw: stringifyError(e)
-      };
-
-      result.classify = classifyResult(result);
-      state.results.push(result);
-      log("❌ 调用失败", result);
-      return result;
-    }
-  }
-
-  function selectedApis() {
-    return API_LIST.filter(api => {
-      const el = document.querySelector(`[data-api-check="${api.name}"]`);
-      return el && el.checked;
-    });
-  }
-
-  function selectedWrappers() {
-    return WRAPPERS.filter(w => {
-      const el = document.querySelector(`[data-wrapper-check="${w.id}"]`);
-      return el && el.checked;
-    });
-  }
-
-  function parseCustomPayload() {
-    const text = $("payloadInput").value.trim();
-    if (!text) return {};
-    return JSON.parse(text);
-  }
-
-  function isDangerousApi(apiName) {
-    return apiName.includes("send") ||
-      apiName.includes("broadcast") ||
-      apiName.includes("tokenPay") ||
-      apiName.includes("sign") ||
-      apiName.includes("wallet_addEthereumChain");
-  }
-
-  function shouldStopAfter(result) {
-    if (!$("stopOnWalletPopup").checked) return false;
-
-    const text = JSON.stringify(result).toLowerCase();
-
-    return text.includes("user rejected") ||
-      text.includes("user cancel") ||
-      text.includes("cancel") ||
-      text.includes("rejected") ||
-      text.includes("用户取消") ||
-      text.includes("password") ||
-      text.includes("confirm");
-  }
-
-  window.runEmptyProbeAll = async function () {
-    detectEnv();
-
-    const yes = confirm(
-      "即将对 7 个交易候选接口做空 payload 探测。\n\n" +
-      "不会构造真实交易，不会主动广播。\n" +
-      "但是某些钱包版本可能仍然会弹错误或确认页。\n\n" +
-      "确定继续？"
-    );
-
-    if (!yes) return;
-
-    for (const api of API_LIST) {
-      log("====== 开始空 payload 探测接口：" + api.name + " ======");
-
-      for (const probe of EMPTY_PROBE_PAYLOADS) {
-        const result = await callApi(api.name, probe.value, {
-          wrapper: probe.label,
-          omitParams: probe.omitParams,
-          timeout: 15000
-        });
-
-        if (shouldStopAfter(result)) {
-          log("检测到疑似钱包弹窗/用户取消，停止该接口后续空 payload 探测", result);
-          break;
-        }
-
-        await sleep(350);
-      }
-    }
-
-    log("全部空 payload 探测完成");
-  };
-
-  window.runSelectedWithCustomPayload = async function () {
-    detectEnv();
-
-    const apis = selectedApis();
-    const wrappers = selectedWrappers();
-
-    if (!apis.length) {
-      alert("请至少选择一个接口");
-      return;
-    }
-
-    if (!wrappers.length) {
-      alert("请至少选择一个 payload 包装格式");
-      return;
-    }
-
-    let payload;
-    try {
-      payload = parseCustomPayload();
-    } catch (e) {
-      alert("payload 不是合法 JSON：" + e.message);
-      return;
-    }
-
-    const yes = confirm(
-      "即将用你填写的自定义 payload 测试选中的接口。\n\n" +
-      "如果 payload 是真实交易，可能触发签名、转账、添加链、广播等操作。\n" +
-      "请只测试自己的钱包，不要确认未知交易。\n\n" +
-      "选中接口数量：" + apis.length + "\n" +
-      "包装格式数量：" + wrappers.length + "\n\n" +
-      "确定继续？"
-    );
-
-    if (!yes) return;
-
-    for (const api of apis) {
-      for (const wrapper of wrappers) {
-        const params = wrapper.build(payload);
-
-        if ($("confirmEveryCall").checked || isDangerousApi(api.name)) {
-          const go = confirm(
-            "准备调用：\n\n" +
-            api.name + "\n\n" +
-            "包装格式：\n" +
-            wrapper.label + "\n\n" +
-            "注意：如果钱包弹出确认页，请仔细核对，不确定就点取消。\n\n" +
-            "继续调用？"
-          );
-
-          if (!go) {
-            log("用户跳过调用", { apiName: api.name, wrapper: wrapper.label });
-            continue;
-          }
-        }
-
-        const result = await callApi(api.name, params, {
-          wrapper: wrapper.label,
-          timeout: 60000
-        });
-
-        if (shouldStopAfter(result)) {
-          log("检测到疑似钱包弹窗/用户取消，停止后续自定义 payload 测试", result);
-          return;
-        }
-
-        await sleep(500);
-      }
-    }
-
-    log("自定义 payload 测试完成");
-  };
-
-  window.runManualOne = async function () {
-    detectEnv();
-
-    let payload;
-    try {
-      payload = parseCustomPayload();
-    } catch (e) {
-      alert("payload 不是合法 JSON：" + e.message);
-      return;
-    }
-
-    const apiName = $("manualApi").value;
-    const wrapperId = $("manualWrapper").value;
-    const wrapper = WRAPPERS.find(w => w.id === wrapperId);
-
-    if (!wrapper) {
-      alert("包装格式不存在");
-      return;
-    }
-
-    const params = wrapper.build(payload);
-
-    const yes = confirm(
-      "即将只调用一个接口：\n\n" +
-      apiName + "\n\n" +
-      "包装格式：\n" +
-      wrapper.label + "\n\n" +
-      "如果是真实交易 payload，请不要随便确认钱包弹窗。\n\n" +
-      "确定继续？"
-    );
-
-    if (!yes) return;
-
-    await callApi(apiName, params, {
-      wrapper: wrapper.label,
-      timeout: 60000
-    });
-  };
-
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  window.copyLog = async function () {
-    const data = {
-      copiedAt: new Date().toISOString(),
-      env: state.env,
-      results: state.results,
-      log: $("log").textContent
+      hasTron: !!window.tron,
+      hasTronLink: !!window.tronLink
     };
 
-    const text = JSON.stringify(data, null, 2);
-
-    try {
-      await navigator.clipboard.writeText(text);
-      alert("已复制完整日志");
-    } catch (e) {
-      $("payloadInput").value = text;
-      alert("浏览器不允许直接复制，已把日志放到 payload 输入框，请手动复制");
-    }
-  };
-
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+    log("环境检测结果:", info);
   }
 
-  function render() {
-    $("apiList").innerHTML = API_LIST.map((api, index) => {
-      const danger = api.risk === "broadcast" || api.risk === "send" || api.risk === "pay";
-
-      return `
-        <div class="api-box">
-          <label>
-            <input type="checkbox" data-api-check="${escapeHtml(api.name)}" ${index === 0 ? "checked" : ""} />
-            <span class="api-name">${escapeHtml(api.name)}</span>
-          </label>
-          <div class="small">分类：${escapeHtml(api.group)}</div>
-          <div class="small ${danger ? "dangerText" : "warnText"}">风险：${escapeHtml(api.risk)}</div>
-          <div class="small">${escapeHtml(api.note)}</div>
-          <div class="row">
-            <button class="gray" onclick="quickSelectApi('${escapeHtml(api.name)}')">只选这个</button>
-            <button class="warn" onclick="quickManualApi('${escapeHtml(api.name)}')">放到单接口测试</button>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    $("wrapperList").innerHTML = WRAPPERS.map((w, index) => {
-      return `
-        <label>
-          <input type="checkbox" data-wrapper-check="${escapeHtml(w.id)}" ${index === 0 ? "checked" : ""} />
-          ${escapeHtml(w.label)}
-        </label>
-      `;
-    }).join("");
-
-    $("manualApi").innerHTML = API_LIST.map(api => {
-      return `<option value="${escapeHtml(api.name)}">${escapeHtml(api.name)}</option>`;
-    }).join("");
-
-    $("manualWrapper").innerHTML = WRAPPERS.map(w => {
-      return `<option value="${escapeHtml(w.id)}">${escapeHtml(w.label)}</option>`;
-    }).join("");
-  }
-
-  window.quickSelectApi = function (apiName) {
-    document.querySelectorAll("[data-api-check]").forEach(el => {
-      el.checked = el.getAttribute("data-api-check") === apiName;
-    });
-  };
-
-  window.quickManualApi = function (apiName) {
-    $("manualApi").value = apiName;
-  };
-
-  render();
   detectEnv();
-})();
 </script>
 </body>
 </html>
