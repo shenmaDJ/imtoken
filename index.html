@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>imToken 交易接口简单测试</title>
+  <title>imToken 交易接口简单ewq测试</title>
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -52,6 +52,14 @@
       background: #991b1b;
     }
 
+    button.gray {
+      background: #374151;
+    }
+
+    button.gray:hover {
+      background: #4b5563;
+    }
+
     textarea, pre {
       width: 100%;
       box-sizing: border-box;
@@ -71,8 +79,8 @@
     }
 
     pre {
-      min-height: 220px;
-      max-height: 500px;
+      min-height: 260px;
+      max-height: 560px;
       overflow: auto;
     }
 
@@ -82,16 +90,8 @@
       line-height: 1.6;
     }
 
-    .ok {
-      color: #34d399;
-    }
-
-    .fail {
-      color: #f87171;
-    }
-
-    .warn {
-      color: #fbbf24;
+    code {
+      color: #93c5fd;
     }
   </style>
 </head>
@@ -100,19 +100,19 @@
 
   <div class="box">
     <div class="tip">
-      用 imToken DApp 浏览器打开这个页面。<br>
-      默认 payload 是 <code>{}</code>，点击下面接口按钮会直接调用：
-      <code>window.imToken.callPromisifyAPI(apiName, payload)</code>
+      用 imToken DApp 浏览器打开。<br>
+      默认 payload 是 <code>{}</code>。<br>
+      点击哪个接口，就直接执行：
+      <br>
+      <code>window.imToken.callPromisifyAPI.call(window.imToken, apiName, payload)</code>
       <br><br>
-      注意：如果你填入真实交易 payload，某些接口可能会弹签名、转账或广播确认页。
+      如果你填入真实交易 payload，可能会触发签名、转账、广播确认页。
     </div>
   </div>
 
   <div class="box">
     <h3>当前 payload</h3>
-    <textarea id="payload">{
-  
-}</textarea>
+    <textarea id="payload">{}</textarea>
   </div>
 
   <div class="box">
@@ -148,8 +148,8 @@
   </div>
 
   <div class="box">
-    <button onclick="detectEnv()">检测环境</button>
-    <button onclick="clearLog()">清空日志</button>
+    <button onclick="detectEnv()" class="gray">检测环境</button>
+    <button onclick="clearLog()" class="gray">清空日志</button>
   </div>
 
   <div class="box">
@@ -194,36 +194,37 @@
     }
   }
 
-  function getImTokenBridge() {
-    if (!window.imToken) {
-      throw new Error("window.imToken 不存在，请在 imToken DApp 浏览器里打开");
-    }
-
-    if (typeof window.imToken.callPromisifyAPI !== "function") {
-      throw new Error("window.imToken.callPromisifyAPI 不存在");
-    }
-
-    return window.imToken.callPromisifyAPI;
-  }
-
   async function testApi(apiName) {
     log("开始测试接口:", apiName);
 
     let payload;
-    let callPromisifyAPI;
 
     try {
       payload = getPayload();
-      callPromisifyAPI = getImTokenBridge();
     } catch (e) {
-      log("❌ 准备失败:", e.message || e);
+      log("❌ payload 错误:", e.message || e);
+      return;
+    }
+
+    if (!window.imToken) {
+      log("❌ window.imToken 不存在，请在 imToken DApp 浏览器里打开");
+      return;
+    }
+
+    if (typeof window.imToken.callPromisifyAPI !== "function") {
+      log("❌ window.imToken.callPromisifyAPI 不存在");
+      log("当前 window.imToken keys:", Object.keys(window.imToken));
       return;
     }
 
     log("发送 payload:", payload);
 
     try {
-      const result = await callPromisifyAPI(apiName, payload);
+      const result = await window.imToken.callPromisifyAPI.call(
+        window.imToken,
+        apiName,
+        payload
+      );
 
       log("✅ 调用成功:", apiName);
       log("返回结果:", result);
@@ -246,6 +247,13 @@
 
   function explainError(message) {
     const msg = String(message || "").toLowerCase();
+
+    if (
+      msg.includes("that.callapi.call") ||
+      msg.includes("callapi.call")
+    ) {
+      return "调用方式错误导致 this 丢失。现在这版已经修复，如果还出现，说明 imToken 当前注入对象本身不完整";
+    }
 
     if (
       msg.includes("no transaction payload") ||
@@ -294,6 +302,10 @@
       userAgent: navigator.userAgent,
 
       hasWindowImToken: !!window.imToken,
+      hasCallAPI: !!(
+        window.imToken &&
+        typeof window.imToken.callAPI === "function"
+      ),
       hasCallPromisifyAPI: !!(
         window.imToken &&
         typeof window.imToken.callPromisifyAPI === "function"
@@ -311,7 +323,10 @@
       tronWebDefaultAddress: window.tronWeb ? window.tronWeb.defaultAddress : null,
 
       hasTron: !!window.tron,
-      hasTronLink: !!window.tronLink
+      tronKeys: window.tron ? Object.keys(window.tron) : null,
+
+      hasTronLink: !!window.tronLink,
+      tronLinkKeys: window.tronLink ? Object.keys(window.tronLink) : null
     };
 
     log("环境检测结果:", info);
