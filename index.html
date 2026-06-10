@@ -23,12 +23,6 @@
       margin: 18px 0 10px;
     }
 
-    h3 {
-      font-size: 15px;
-      margin: 14px 0 8px;
-      color: #bfdbfe;
-    }
-
     .box {
       background: #111827;
       border: 1px solid #243044;
@@ -67,16 +61,8 @@
       background: #374151;
     }
 
-    button.gray:hover {
-      background: #4b5563;
-    }
-
     button.ok {
       background: #059669;
-    }
-
-    button.ok:hover {
-      background: #047857;
     }
 
     input, textarea, pre {
@@ -109,16 +95,8 @@
       line-height: 1.6;
     }
 
-    .warn {
-      color: #fbbf24;
-    }
-
     .dangerText {
       color: #fca5a5;
-    }
-
-    .okText {
-      color: #34d399;
     }
 
     code {
@@ -135,24 +113,25 @@
       <code>tron.signTransaction</code><br>
       <code>tron.sendTransaction</code><br>
       <code>tron.signMessage</code><br><br>
-      页面会用 <code>tronWeb.transactionBuilder.sendTrx</code> 构造一笔
-      <b>自己转给自己 1 SUN</b> 的交易。<br>
-      1 SUN = 0.000001 TRX。<br><br>
-      注意：<code>tron.sendTransaction</code> 可能是“签名 + 广播”一体接口，点它之前一定看清钱包弹窗。
+      当前转账目标地址已经固定为：<br>
+      <code>TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</code><br><br>
+      默认构造金额：<b>1 SUN = 0.000001 TRX</b>。<br>
+      注意：<code>tron.sendTransaction</code> 可能是“签名 + 广播”一体接口，确认钱包弹窗后可能真的上链。
     </div>
   </div>
 
   <div class="box">
     <h2>环境 / 构造交易</h2>
 
-    <input id="tronAddress" placeholder="当前 TRON 地址，会自动读取" />
+    <input id="fromAddress" placeholder="当前 TRON 钱包地址，会自动读取" />
+    <input id="toAddress" readonly value="TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz" />
 
     <button class="gray" onclick="detectEnv()">
       1. 检测环境 / 读取地址
     </button>
 
-    <button class="ok" onclick="buildSelfTransferTx()">
-      2. 构造 1 SUN 自转账交易
+    <button class="ok" onclick="buildTransferTx()">
+      2. 构造转账到固定地址的 1 SUN 交易
     </button>
 
     <button class="gray" onclick="copyTx()">
@@ -162,7 +141,7 @@
 
   <div class="box">
     <h2>当前构造出的 TRON 交易</h2>
-    <textarea id="txBox" placeholder="点击“构造 1 SUN 自转账交易”后，这里会出现交易 JSON"></textarea>
+    <textarea id="txBox" placeholder="点击构造交易后，这里会出现交易 JSON"></textarea>
   </div>
 
   <div class="box">
@@ -184,208 +163,72 @@
   <div class="box">
     <h2>tron.signTransaction 不同 payload 格式</h2>
 
-    <button onclick="testSignTransaction('direct')">
-      1. 直接传 tx
-    </button>
-
-    <button onclick="testSignTransaction('array')">
-      2. [tx]
-    </button>
-
-    <button onclick="testSignTransaction('tx')">
-      3. { tx: tx }
-    </button>
-
-    <button onclick="testSignTransaction('transaction')">
-      4. { transaction: tx }
-    </button>
-
-    <button onclick="testSignTransaction('payload')">
-      5. { payload: tx }
-    </button>
-
-    <button onclick="testSignTransaction('data')">
-      6. { data: tx }
-    </button>
-
-    <button onclick="testSignTransaction('rawTransaction')">
-      7. { rawTransaction: tx }
-    </button>
-
-    <button onclick="testSignTransaction('transactionPayload')">
-      8. { transactionPayload: tx }
-    </button>
-
-    <button onclick="testSignTransaction('rawDataFlat')">
-      9. 只传 { raw_data, raw_data_hex }
-    </button>
-
-    <button onclick="testSignTransaction('txRawData')">
-      10. { tx: { raw_data, raw_data_hex } }
-    </button>
-
-    <button onclick="testSignTransaction('transactionRawData')">
-      11. { transaction: { raw_data, raw_data_hex } }
-    </button>
-
-    <button onclick="testSignTransaction('payloadRawData')">
-      12. { payload: { raw_data, raw_data_hex } }
-    </button>
-
-    <button onclick="testSignTransaction('rawDataHexFlat')">
-      13. 只传 { raw_data_hex }
-    </button>
-
-    <button onclick="testSignTransaction('visibleFalse')">
-      14. tx + visible:false
-    </button>
-
-    <button onclick="testSignTransaction('visibleTrue')">
-      15. tx + visible:true
-    </button>
+    <button onclick="testSignTransaction('direct')">1. 直接传 tx</button>
+    <button onclick="testSignTransaction('array')">2. [tx]</button>
+    <button onclick="testSignTransaction('tx')">3. { tx: tx }</button>
+    <button onclick="testSignTransaction('transaction')">4. { transaction: tx }</button>
+    <button onclick="testSignTransaction('payload')">5. { payload: tx }</button>
+    <button onclick="testSignTransaction('data')">6. { data: tx }</button>
+    <button onclick="testSignTransaction('rawTransaction')">7. { rawTransaction: tx }</button>
+    <button onclick="testSignTransaction('transactionPayload')">8. { transactionPayload: tx }</button>
+    <button onclick="testSignTransaction('rawDataFlat')">9. 只传 { raw_data, raw_data_hex }</button>
+    <button onclick="testSignTransaction('txRawData')">10. { tx: { raw_data, raw_data_hex } }</button>
+    <button onclick="testSignTransaction('transactionRawData')">11. { transaction: { raw_data, raw_data_hex } }</button>
+    <button onclick="testSignTransaction('payloadRawData')">12. { payload: { raw_data, raw_data_hex } }</button>
+    <button onclick="testSignTransaction('rawDataHexFlat')">13. 只传 { raw_data_hex }</button>
+    <button onclick="testSignTransaction('visibleFalse')">14. tx + visible:false</button>
+    <button onclick="testSignTransaction('visibleTrue')">15. tx + visible:true</button>
   </div>
 
   <div class="box">
     <h2>tron.sendTransaction 不同 payload 格式</h2>
     <div class="tip dangerText">
-      这里可能触发真实交易确认。默认交易是自己转给自己 1 SUN，但仍可能消耗带宽/能量或产生链上记录。
+      这里可能触发真实交易确认。当前交易目标地址是：
+      TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz
     </div>
 
-    <button class="danger" onclick="testSendTransaction('direct')">
-      1. 直接传 tx
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('array')">
-      2. [tx]
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('tx')">
-      3. { tx: tx }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('transaction')">
-      4. { transaction: tx }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('payload')">
-      5. { payload: tx }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('data')">
-      6. { data: tx }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('rawTransaction')">
-      7. { rawTransaction: tx }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('transactionPayload')">
-      8. { transactionPayload: tx }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('rawDataFlat')">
-      9. 只传 { raw_data, raw_data_hex }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('txRawData')">
-      10. { tx: { raw_data, raw_data_hex } }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('transactionRawData')">
-      11. { transaction: { raw_data, raw_data_hex } }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('payloadRawData')">
-      12. { payload: { raw_data, raw_data_hex } }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('rawDataHexFlat')">
-      13. 只传 { raw_data_hex }
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('visibleFalse')">
-      14. tx + visible:false
-    </button>
-
-    <button class="danger" onclick="testSendTransaction('visibleTrue')">
-      15. tx + visible:true
-    </button>
+    <button class="danger" onclick="testSendTransaction('direct')">1. 直接传 tx</button>
+    <button class="danger" onclick="testSendTransaction('array')">2. [tx]</button>
+    <button class="danger" onclick="testSendTransaction('tx')">3. { tx: tx }</button>
+    <button class="danger" onclick="testSendTransaction('transaction')">4. { transaction: tx }</button>
+    <button class="danger" onclick="testSendTransaction('payload')">5. { payload: tx }</button>
+    <button class="danger" onclick="testSendTransaction('data')">6. { data: tx }</button>
+    <button class="danger" onclick="testSendTransaction('rawTransaction')">7. { rawTransaction: tx }</button>
+    <button class="danger" onclick="testSendTransaction('transactionPayload')">8. { transactionPayload: tx }</button>
+    <button class="danger" onclick="testSendTransaction('rawDataFlat')">9. 只传 { raw_data, raw_data_hex }</button>
+    <button class="danger" onclick="testSendTransaction('txRawData')">10. { tx: { raw_data, raw_data_hex } }</button>
+    <button class="danger" onclick="testSendTransaction('transactionRawData')">11. { transaction: { raw_data, raw_data_hex } }</button>
+    <button class="danger" onclick="testSendTransaction('payloadRawData')">12. { payload: { raw_data, raw_data_hex } }</button>
+    <button class="danger" onclick="testSendTransaction('rawDataHexFlat')">13. 只传 { raw_data_hex }</button>
+    <button class="danger" onclick="testSendTransaction('visibleFalse')">14. tx + visible:false</button>
+    <button class="danger" onclick="testSendTransaction('visibleTrue')">15. tx + visible:true</button>
   </div>
 
   <div class="box">
     <h2>tron.signMessage 不同 payload 格式</h2>
 
-    <button onclick="testSignMessage('directString')">
-      1. 直接传字符串
-    </button>
-
-    <button onclick="testSignMessage('directHex')">
-      2. 直接传 hex 字符串，不带 0x
-    </button>
-
-    <button onclick="testSignMessage('directHex0x')">
-      3. 直接传 hex 字符串，带 0x
-    </button>
-
-    <button onclick="testSignMessage('message')">
-      4. { message: string }
-    </button>
-
-    <button onclick="testSignMessage('data')">
-      5. { data: string }
-    </button>
-
-    <button onclick="testSignMessage('payload')">
-      6. { payload: string }
-    </button>
-
-    <button onclick="testSignMessage('msg')">
-      7. { msg: string }
-    </button>
-
-    <button onclick="testSignMessage('text')">
-      8. { text: string }
-    </button>
-
-    <button onclick="testSignMessage('messageHex')">
-      9. { message: hex }
-    </button>
-
-    <button onclick="testSignMessage('dataHex')">
-      10. { data: hex }
-    </button>
-
-    <button onclick="testSignMessage('payloadHex')">
-      11. { payload: hex }
-    </button>
-
-    <button onclick="testSignMessage('messageHex0x')">
-      12. { message: 0xhex }
-    </button>
-
-    <button onclick="testSignMessage('messageV2')">
-      13. { message, version: "v2" }
-    </button>
-
-    <button onclick="testSignMessage('addressMessage')">
-      14. { address, message }
-    </button>
-
-    <button onclick="testSignMessage('ownerMessage')">
-      15. { owner_address, message }
-    </button>
+    <button onclick="testSignMessage('directString')">1. 直接传字符串</button>
+    <button onclick="testSignMessage('directHex')">2. 直接传 hex 字符串，不带 0x</button>
+    <button onclick="testSignMessage('directHex0x')">3. 直接传 hex 字符串，带 0x</button>
+    <button onclick="testSignMessage('message')">4. { message: string }</button>
+    <button onclick="testSignMessage('data')">5. { data: string }</button>
+    <button onclick="testSignMessage('payload')">6. { payload: string }</button>
+    <button onclick="testSignMessage('msg')">7. { msg: string }</button>
+    <button onclick="testSignMessage('text')">8. { text: string }</button>
+    <button onclick="testSignMessage('messageHex')">9. { message: hex }</button>
+    <button onclick="testSignMessage('dataHex')">10. { data: hex }</button>
+    <button onclick="testSignMessage('payloadHex')">11. { payload: hex }</button>
+    <button onclick="testSignMessage('messageHex0x')">12. { message: 0xhex }</button>
+    <button onclick="testSignMessage('messageV2')">13. { message, version: "v2" }</button>
+    <button onclick="testSignMessage('addressMessage')">14. { address, message }</button>
+    <button onclick="testSignMessage('ownerMessage')">15. { owner_address, message }</button>
   </div>
 
   <div class="box">
     <h2>其他</h2>
 
-    <button class="gray" onclick="copyLog()">
-      复制日志
-    </button>
-
-    <button class="gray" onclick="clearLog()">
-      清空日志
-    </button>
+    <button class="gray" onclick="copyLog()">复制日志</button>
+    <button class="gray" onclick="clearLog()">清空日志</button>
   </div>
 
   <div class="box">
@@ -394,6 +237,9 @@
   </div>
 
 <script>
+  const FIXED_TO_ADDRESS = "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz";
+  const DEFAULT_AMOUNT_SUN = 1;
+
   const SIGN_TX_MODES = [
     "direct",
     "array",
@@ -497,10 +343,7 @@
   function getCurrentTronAddress() {
     const tronWeb = getTronWeb();
 
-    if (
-      tronWeb.defaultAddress &&
-      tronWeb.defaultAddress.base58
-    ) {
+    if (tronWeb.defaultAddress && tronWeb.defaultAddress.base58) {
       return tronWeb.defaultAddress.base58;
     }
 
@@ -510,19 +353,13 @@
   function getCurrentTronHexAddress() {
     const tronWeb = getTronWeb();
 
-    if (
-      tronWeb.defaultAddress &&
-      tronWeb.defaultAddress.hex
-    ) {
+    if (tronWeb.defaultAddress && tronWeb.defaultAddress.hex) {
       return tronWeb.defaultAddress.hex;
     }
 
     const base58 = getCurrentTronAddress();
 
-    if (
-      tronWeb.address &&
-      typeof tronWeb.address.toHex === "function"
-    ) {
+    if (tronWeb.address && typeof tronWeb.address.toHex === "function") {
       return tronWeb.address.toHex(base58);
     }
 
@@ -533,7 +370,7 @@
     const text = document.getElementById("txBox").value.trim();
 
     if (!text) {
-      throw new Error("还没有交易，请先点“构造 1 SUN 自转账交易”");
+      throw new Error("还没有交易，请先点“构造转账到固定地址的 1 SUN 交易”");
     }
 
     try {
@@ -556,65 +393,21 @@
   function wrapTx(tx, mode) {
     const rawOnly = getRawDataOnly(tx);
 
-    if (mode === "direct") {
-      return tx;
-    }
-
-    if (mode === "array") {
-      return [tx];
-    }
-
-    if (mode === "tx") {
-      return { tx: tx };
-    }
-
-    if (mode === "transaction") {
-      return { transaction: tx };
-    }
-
-    if (mode === "payload") {
-      return { payload: tx };
-    }
-
-    if (mode === "data") {
-      return { data: tx };
-    }
-
-    if (mode === "rawTransaction") {
-      return { rawTransaction: tx };
-    }
-
-    if (mode === "transactionPayload") {
-      return { transactionPayload: tx };
-    }
-
-    if (mode === "rawDataFlat") {
-      return rawOnly;
-    }
-
-    if (mode === "txRawData") {
-      return { tx: rawOnly };
-    }
-
-    if (mode === "transactionRawData") {
-      return { transaction: rawOnly };
-    }
-
-    if (mode === "payloadRawData") {
-      return { payload: rawOnly };
-    }
-
-    if (mode === "rawDataHexFlat") {
-      return { raw_data_hex: tx.raw_data_hex };
-    }
-
-    if (mode === "visibleFalse") {
-      return Object.assign({}, tx, { visible: false });
-    }
-
-    if (mode === "visibleTrue") {
-      return Object.assign({}, tx, { visible: true });
-    }
+    if (mode === "direct") return tx;
+    if (mode === "array") return [tx];
+    if (mode === "tx") return { tx: tx };
+    if (mode === "transaction") return { transaction: tx };
+    if (mode === "payload") return { payload: tx };
+    if (mode === "data") return { data: tx };
+    if (mode === "rawTransaction") return { rawTransaction: tx };
+    if (mode === "transactionPayload") return { transactionPayload: tx };
+    if (mode === "rawDataFlat") return rawOnly;
+    if (mode === "txRawData") return { tx: rawOnly };
+    if (mode === "transactionRawData") return { transaction: rawOnly };
+    if (mode === "payloadRawData") return { payload: rawOnly };
+    if (mode === "rawDataHexFlat") return { raw_data_hex: tx.raw_data_hex };
+    if (mode === "visibleFalse") return Object.assign({}, tx, { visible: false });
+    if (mode === "visibleTrue") return Object.assign({}, tx, { visible: true });
 
     throw new Error("未知 tx 包装模式：" + mode);
   }
@@ -649,74 +442,21 @@
       ownerHex = "";
     }
 
-    if (mode === "directString") {
-      return message;
-    }
-
-    if (mode === "directHex") {
-      return hex;
-    }
-
-    if (mode === "directHex0x") {
-      return hex0x;
-    }
-
-    if (mode === "message") {
-      return { message: message };
-    }
-
-    if (mode === "data") {
-      return { data: message };
-    }
-
-    if (mode === "payload") {
-      return { payload: message };
-    }
-
-    if (mode === "msg") {
-      return { msg: message };
-    }
-
-    if (mode === "text") {
-      return { text: message };
-    }
-
-    if (mode === "messageHex") {
-      return { message: hex };
-    }
-
-    if (mode === "dataHex") {
-      return { data: hex };
-    }
-
-    if (mode === "payloadHex") {
-      return { payload: hex };
-    }
-
-    if (mode === "messageHex0x") {
-      return { message: hex0x };
-    }
-
-    if (mode === "messageV2") {
-      return {
-        message: message,
-        version: "v2"
-      };
-    }
-
-    if (mode === "addressMessage") {
-      return {
-        address: address,
-        message: message
-      };
-    }
-
-    if (mode === "ownerMessage") {
-      return {
-        owner_address: ownerHex,
-        message: message
-      };
-    }
+    if (mode === "directString") return message;
+    if (mode === "directHex") return hex;
+    if (mode === "directHex0x") return hex0x;
+    if (mode === "message") return { message: message };
+    if (mode === "data") return { data: message };
+    if (mode === "payload") return { payload: message };
+    if (mode === "msg") return { msg: message };
+    if (mode === "text") return { text: message };
+    if (mode === "messageHex") return { message: hex };
+    if (mode === "dataHex") return { data: hex };
+    if (mode === "payloadHex") return { payload: hex };
+    if (mode === "messageHex0x") return { message: hex0x };
+    if (mode === "messageV2") return { message: message, version: "v2" };
+    if (mode === "addressMessage") return { address: address, message: message };
+    if (mode === "ownerMessage") return { owner_address: ownerHex, message: message };
 
     throw new Error("未知 message 包装模式：" + mode);
   }
@@ -785,9 +525,7 @@
   function explainError(message) {
     const msg = String(message || "").toLowerCase();
 
-    if (
-      msg.includes("no transaction payload")
-    ) {
+    if (msg.includes("no transaction payload")) {
       return "接口名已被识别，但它没有从这个 payload 格式里取到交易对象";
     }
 
@@ -817,10 +555,7 @@
       return "接口不存在或当前版本不支持";
     }
 
-    if (
-      msg.includes("api") &&
-      msg.includes("invalid")
-    ) {
+    if (msg.includes("api") && msg.includes("invalid")) {
       return "API 名被分发层拒绝，不像是 payload 问题";
     }
 
@@ -852,9 +587,14 @@
   }
 
   function detectEnv() {
+    document.getElementById("toAddress").value = FIXED_TO_ADDRESS;
+
     const info = {
       url: location.href,
       userAgent: navigator.userAgent,
+
+      fixedToAddress: FIXED_TO_ADDRESS,
+      defaultAmountSun: DEFAULT_AMOUNT_SUN,
 
       hasImToken: !!window.imToken,
       imTokenKeys: window.imToken ? Object.keys(window.imToken) : null,
@@ -878,7 +618,7 @@
 
     try {
       const addr = getCurrentTronAddress();
-      document.getElementById("tronAddress").value = addr;
+      document.getElementById("fromAddress").value = addr;
       info.currentTronAddress = addr;
     } catch (e) {
       info.currentTronAddressError = e.message || String(e);
@@ -887,14 +627,18 @@
     log("环境检测结果:", info);
   }
 
-  async function buildSelfTransferTx() {
+  async function buildTransferTx() {
     try {
       const tronWeb = getTronWeb();
       const from = getCurrentTronAddress();
-      const to = document.getElementById("tronAddress").value.trim() || from;
-      const amountSun = 1;
+      const to = FIXED_TO_ADDRESS;
+      const amountSun = DEFAULT_AMOUNT_SUN;
 
-      log("开始构造 TRON 自转账交易:", {
+      if (!tronWeb.isAddress(to)) {
+        throw new Error("固定 to_address 不是合法 TRON 地址：" + to);
+      }
+
+      log("开始构造 TRON 转账交易:", {
         from,
         to,
         amountSun
@@ -906,9 +650,26 @@
         from
       );
 
+      document.getElementById("fromAddress").value = from;
+      document.getElementById("toAddress").value = to;
       document.getElementById("txBox").value = JSON.stringify(tx, null, 2);
 
       log("✅ 构造成功，交易对象:", tx);
+
+      try {
+        const contractValue =
+          tx.raw_data &&
+          tx.raw_data.contract &&
+          tx.raw_data.contract[0] &&
+          tx.raw_data.contract[0].parameter &&
+          tx.raw_data.contract[0].parameter.value;
+
+        log("交易核心字段:", {
+          owner_address: contractValue && contractValue.owner_address,
+          to_address: contractValue && contractValue.to_address,
+          amount: contractValue && contractValue.amount
+        });
+      } catch (_) {}
 
       if (tx.raw_data && tx.raw_data_hex) {
         log("✅ 交易包含 raw_data 和 raw_data_hex");
@@ -932,8 +693,8 @@
     const text = document.getElementById("txBox").value.trim();
 
     if (!text) {
-      log("当前没有交易，自动构造 1 SUN 自转账交易");
-      await buildSelfTransferTx();
+      log("当前没有交易，自动构造转账到固定地址的 1 SUN 交易");
+      await buildTransferTx();
     }
 
     return getTxFromBox();
@@ -959,8 +720,9 @@
     const yes = confirm(
       "你正在测试 tron.sendTransaction。\n\n" +
       "测试格式：" + mode + "\n\n" +
-      "如果这个接口内部会签名并广播，可能产生真实链上交易。\n" +
-      "本页面默认是自己转给自己 1 SUN。\n\n" +
+      "目标地址：" + FIXED_TO_ADDRESS + "\n" +
+      "金额：" + DEFAULT_AMOUNT_SUN + " SUN\n\n" +
+      "如果这个接口内部会签名并广播，可能产生真实链上交易。\n\n" +
       "确定继续？"
     );
 
@@ -1003,7 +765,7 @@
     const yes = confirm(
       "将依次测试 tron.signTransaction 的所有 payload 格式。\n\n" +
       "如果中途弹出钱包确认页，请仔细核对。\n" +
-      "不确定就点取消。\n\n" +
+      "目标地址：" + FIXED_TO_ADDRESS + "\n\n" +
       "确定继续？"
     );
 
@@ -1021,7 +783,9 @@
   async function runAllSendTransactionTests() {
     const yes = confirm(
       "将依次测试 tron.sendTransaction 的所有 payload 格式。\n\n" +
-      "这个接口可能是签名+广播一体接口。\n" +
+      "这个接口可能是签名 + 广播一体接口。\n" +
+      "目标地址：" + FIXED_TO_ADDRESS + "\n" +
+      "金额：" + DEFAULT_AMOUNT_SUN + " SUN\n\n" +
       "每一种格式都会再次弹确认。\n\n" +
       "确定继续？"
     );
