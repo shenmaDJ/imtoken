@@ -3,19 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>imToken 交易接口11简单ewq测试</title>
+  <title>imToken TRON 原生交易接口测试</title>
   <style>
     body {
+      margin: 0;
+      padding: 16px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #0b1020;
       color: #e5e7eb;
-      padding: 16px;
-      margin: 0;
     }
 
     h1 {
       font-size: 22px;
-      margin-bottom: 12px;
+      margin: 0 0 12px;
+    }
+
+    h2 {
+      font-size: 17px;
+      margin: 18px 0 10px;
     }
 
     .box {
@@ -60,7 +65,7 @@
       background: #4b5563;
     }
 
-    textarea, pre {
+    input, textarea, pre {
       width: 100%;
       box-sizing: border-box;
       background: #030712;
@@ -75,12 +80,12 @@
     }
 
     textarea {
-      min-height: 120px;
+      min-height: 140px;
     }
 
     pre {
-      min-height: 260px;
-      max-height: 560px;
+      min-height: 240px;
+      max-height: 520px;
       overflow: auto;
     }
 
@@ -96,64 +101,108 @@
   </style>
 </head>
 <body>
-  <h1>imToken 交易原生接口简单测试</h1>
+  <h1>imToken TRON 原生交易接口测试</h1>
 
   <div class="box">
     <div class="tip">
-      用 imToken DApp 浏览器打开。<br>
-      默认 payload 是 <code>{}</code>。<br>
-      点击哪个接口，就直接执行：
-      <br>
-      <code>window.imToken.callPromisifyAPI.call(window.imToken, apiName, payload)</code>
-      <br><br>
-      如果你填入真实交易 payload，可能会触发签名、转账、广播确认页。
+      这个页面专门测试：<br>
+      <code>tron.signTransaction</code><br>
+      <code>tron.sendTransaction</code><br>
+      <code>tron.signMessage</code><br><br>
+      它会用 <code>tronWeb.transactionBuilder.sendTrx</code> 构造一笔
+      <b>自己转给自己 1 SUN</b> 的 TRON 交易。<br>
+      1 SUN = 0.000001 TRX。<br><br>
+      点 <code>sendTransaction</code> 相关按钮时，可能会触发真实上链确认，请看清钱包弹窗。
     </div>
   </div>
 
   <div class="box">
-    <h3>当前 payload</h3>
-    <textarea id="payload">{}</textarea>
+    <h2>当前 TRON 地址</h2>
+    <input id="tronAddress" placeholder="自动读取当前 TRON 地址" />
+    <button onclick="detectEnv()" class="gray">检测环境 / 读取地址</button>
+    <button onclick="buildSelfTransferTx()">构造 1 SUN 自转账交易</button>
   </div>
 
   <div class="box">
-    <h3>点击接口直接测试</h3>
+    <h2>当前构造出的 TRON 交易</h2>
+    <textarea id="txBox" placeholder="点击上面的构造按钮后，这里会出现 raw transaction"></textarea>
+  </div>
 
-    <button onclick="testApi('transaction.signTransaction')">
-      transaction.signTransaction
+  <div class="box">
+    <h2>测试 tron.signTransaction</h2>
+    <button onclick="testSignTransaction('direct')">
+      tron.signTransaction：直接传 tx
     </button>
-
-    <button onclick="testApi('transaction.tokenPay')">
-      transaction.tokenPay
+    <button onclick="testSignTransaction('tx')">
+      tron.signTransaction：{ tx: tx }
     </button>
-
-    <button onclick="testApi('wallet_addEthereumChain')">
-      wallet_addEthereumChain
+    <button onclick="testSignTransaction('transaction')">
+      tron.signTransaction：{ transaction: tx }
     </button>
-
-    <button onclick="testApi('tron.sendTransaction')" class="danger">
-      tron.sendTransaction
+    <button onclick="testSignTransaction('payload')">
+      tron.signTransaction：{ payload: tx }
     </button>
-
-    <button onclick="testApi('tron.signTransaction')" class="danger">
-      tron.signTransaction
-    </button>
-
-    <button onclick="testApi('tron.signMessage')" class="danger">
-      tron.signMessage
-    </button>
-
-    <button onclick="testApi('tron.broadcastTransaction')" class="danger">
-      tron.broadcastTransaction
+    <button onclick="testSignTransaction('rawTransaction')">
+      tron.signTransaction：{ rawTransaction: tx }
     </button>
   </div>
 
   <div class="box">
-    <button onclick="detectEnv()" class="gray">检测环境</button>
-    <button onclick="clearLog()" class="gray">清空日志</button>
+    <h2>测试 tron.sendTransaction</h2>
+    <div class="tip">
+      注意：如果这个接口内部是“签名 + 广播”，可能会产生真实链上交易。
+    </div>
+    <button onclick="testSendTransaction('direct')" class="danger">
+      tron.sendTransaction：直接传 tx
+    </button>
+    <button onclick="testSendTransaction('tx')" class="danger">
+      tron.sendTransaction：{ tx: tx }
+    </button>
+    <button onclick="testSendTransaction('transaction')" class="danger">
+      tron.sendTransaction：{ transaction: tx }
+    </button>
+    <button onclick="testSendTransaction('payload')" class="danger">
+      tron.sendTransaction：{ payload: tx }
+    </button>
+    <button onclick="testSendTransaction('rawTransaction')" class="danger">
+      tron.sendTransaction：{ rawTransaction: tx }
+    </button>
   </div>
 
   <div class="box">
-    <h3>日志</h3>
+    <h2>测试 tron.signMessage</h2>
+    <button onclick="testSignMessage('directString')">
+      tron.signMessage：直接传字符串
+    </button>
+    <button onclick="testSignMessage('message')">
+      tron.signMessage：{ message: string }
+    </button>
+    <button onclick="testSignMessage('data')">
+      tron.signMessage：{ data: string }
+    </button>
+    <button onclick="testSignMessage('payload')">
+      tron.signMessage：{ payload: string }
+    </button>
+    <button onclick="testSignMessage('hexMessage')">
+      tron.signMessage：{ message: hex }
+    </button>
+  </div>
+
+  <div class="box">
+    <h2>其他</h2>
+    <button onclick="testBroadcastInvalid()" class="danger">
+      测试 tron.broadcastTransaction：{}
+    </button>
+    <button onclick="copyLog()" class="gray">
+      复制日志
+    </button>
+    <button onclick="clearLog()" class="gray">
+      清空日志
+    </button>
+  </div>
+
+  <div class="box">
+    <h2>日志</h2>
     <pre id="log"></pre>
   </div>
 
@@ -180,48 +229,95 @@
     document.getElementById("log").textContent = "";
   }
 
-  function getPayload() {
-    const text = document.getElementById("payload").value.trim();
+  function getImToken() {
+    if (!window.imToken) {
+      throw new Error("window.imToken 不存在，请在 imToken DApp 浏览器打开");
+    }
+
+    if (typeof window.imToken.callPromisifyAPI !== "function") {
+      throw new Error("window.imToken.callPromisifyAPI 不存在");
+    }
+
+    return window.imToken;
+  }
+
+  function getTronWeb() {
+    if (!window.tronWeb) {
+      throw new Error("window.tronWeb 不存在，请切到 TRON 钱包环境打开");
+    }
+
+    return window.tronWeb;
+  }
+
+  function getCurrentTronAddress() {
+    const tronWeb = getTronWeb();
+
+    if (
+      tronWeb.defaultAddress &&
+      tronWeb.defaultAddress.base58
+    ) {
+      return tronWeb.defaultAddress.base58;
+    }
+
+    throw new Error("没有读取到 tronWeb.defaultAddress.base58");
+  }
+
+  function getTxFromBox() {
+    const text = document.getElementById("txBox").value.trim();
 
     if (!text) {
-      return {};
+      throw new Error("还没有交易，请先点“构造 1 SUN 自转账交易”");
     }
 
     try {
       return JSON.parse(text);
     } catch (e) {
-      throw new Error("payload 不是合法 JSON: " + e.message);
+      throw new Error("txBox 里的交易 JSON 格式不对：" + e.message);
     }
   }
 
-  async function testApi(apiName) {
-    log("开始测试接口:", apiName);
+  function wrapTx(tx, mode) {
+    if (mode === "direct") return tx;
+    if (mode === "tx") return { tx: tx };
+    if (mode === "transaction") return { transaction: tx };
+    if (mode === "payload") return { payload: tx };
+    if (mode === "rawTransaction") return { rawTransaction: tx };
 
-    let payload;
+    throw new Error("未知 tx 包装模式：" + mode);
+  }
 
-    try {
-      payload = getPayload();
-    } catch (e) {
-      log("❌ payload 错误:", e.message || e);
-      return;
+  function stringToHex(str) {
+    let result = "";
+
+    for (let i = 0; i < str.length; i++) {
+      result += str.charCodeAt(i).toString(16).padStart(2, "0");
     }
 
-    if (!window.imToken) {
-      log("❌ window.imToken 不存在，请在 imToken DApp 浏览器里打开");
-      return;
-    }
+    return result;
+  }
 
-    if (typeof window.imToken.callPromisifyAPI !== "function") {
-      log("❌ window.imToken.callPromisifyAPI 不存在");
-      log("当前 window.imToken keys:", Object.keys(window.imToken));
-      return;
-    }
+  function wrapMessage(mode) {
+    const msg = "imToken tron.signMessage test " + new Date().toISOString();
+    const hex = stringToHex(msg);
 
+    if (mode === "directString") return msg;
+    if (mode === "message") return { message: msg };
+    if (mode === "data") return { data: msg };
+    if (mode === "payload") return { payload: msg };
+    if (mode === "hexMessage") return { message: hex };
+
+    throw new Error("未知 message 包装模式：" + mode);
+  }
+
+  async function callNative(apiName, payload) {
+    const imToken = getImToken();
+
+    log("开始调用:", apiName);
     log("发送 payload:", payload);
 
     try {
-      const result = await window.imToken.callPromisifyAPI.call(
-        window.imToken,
+      const result = await imToken.callPromisifyAPI.call(
+        imToken,
         apiName,
         payload
       );
@@ -229,19 +325,21 @@
       log("✅ 调用成功:", apiName);
       log("返回结果:", result);
 
-    } catch (e) {
-      log("❌ 调用失败:", apiName);
+      return result;
 
+    } catch (e) {
       const err = {
         name: e && e.name,
         message: e && e.message,
         code: e && e.code,
-        stack: e && e.stack,
         raw: String(e)
       };
 
+      log("❌ 调用失败:", apiName);
       log("错误信息:", err);
-      log("判断结果:", explainError(err.message || err.raw || ""));
+      log("判断:", explainError(err.message || err.raw || ""));
+
+      return null;
     }
   }
 
@@ -249,48 +347,55 @@
     const msg = String(message || "").toLowerCase();
 
     if (
-      msg.includes("that.callapi.call") ||
-      msg.includes("callapi.call")
+      msg.includes("no transaction payload") ||
+      msg.includes("payload")
     ) {
-      return "调用方式错误导致 this 丢失。现在这版已经修复，如果还出现，说明 imToken 当前注入对象本身不完整";
+      return "接口已被识别，但它没有拿到想要的 transaction payload，说明包装格式还不对";
     }
 
     if (
-      msg.includes("no transaction payload") ||
-      msg.includes("payload") ||
       msg.includes("raw_data") ||
       msg.includes("raw data") ||
-      msg.includes("invalid params") ||
-      msg.includes("missing")
+      msg.includes("raw_data_hex")
     ) {
-      return "接口名可能被识别到了，但是 payload 格式不对或缺少交易数据";
+      return "接口已进入交易校验阶段，但交易结构缺 raw_data / raw_data_hex";
     }
 
     if (
-      msg.includes("method not found") ||
-      msg.includes("not found") ||
-      msg.includes("unsupported") ||
-      msg.includes("not support") ||
-      msg.includes("undefined")
+      msg.includes("invalid") &&
+      msg.includes("transaction")
     ) {
-      return "当前 imToken 版本大概率不支持这个接口";
+      return "接口已进入交易校验阶段，但交易格式不符合它要求";
+    }
+
+    if (
+      msg.includes("method") &&
+      msg.includes("not found")
+    ) {
+      return "接口不存在或不能通过 callPromisifyAPI 调用";
+    }
+
+    if (
+      msg.includes("api") &&
+      msg.includes("invalid")
+    ) {
+      return "这个 API 名被识别到分发层，但不在允许列表里";
     }
 
     if (
       msg.includes("cancel") ||
       msg.includes("rejected") ||
-      msg.includes("user denied") ||
       msg.includes("用户取消")
     ) {
-      return "可能已经拉起钱包确认页，但用户取消了";
+      return "大概率已经拉起钱包确认页，用户取消了";
     }
 
     if (
+      msg.includes("钱包") ||
       msg.includes("wallet") ||
-      msg.includes("在该链下找不到此钱包") ||
-      msg.includes("chain")
+      msg.includes("链")
     ) {
-      return "接口可能走到了钱包侧，但是当前链或钱包账户不匹配";
+      return "接口可能走到了钱包侧，但是链或账户环境不匹配";
     }
 
     return "未知错误，需要看完整日志";
@@ -301,35 +406,138 @@
       url: location.href,
       userAgent: navigator.userAgent,
 
-      hasWindowImToken: !!window.imToken,
-      hasCallAPI: !!(
-        window.imToken &&
-        typeof window.imToken.callAPI === "function"
-      ),
+      hasImToken: !!window.imToken,
+      imTokenKeys: window.imToken ? Object.keys(window.imToken) : null,
       hasCallPromisifyAPI: !!(
         window.imToken &&
         typeof window.imToken.callPromisifyAPI === "function"
       ),
 
-      imTokenKeys: window.imToken ? Object.keys(window.imToken) : null,
-
-      hasEthereum: !!window.ethereum,
-      ethereumKeys: window.ethereum ? Object.keys(window.ethereum) : null,
-      ethereumChainId: window.ethereum ? window.ethereum.chainId : null,
-      ethereumSelectedAddress: window.ethereum ? window.ethereum.selectedAddress : null,
-
       hasTronWeb: !!window.tronWeb,
       tronWebReady: window.tronWeb ? window.tronWeb.ready : null,
       tronWebDefaultAddress: window.tronWeb ? window.tronWeb.defaultAddress : null,
 
-      hasTron: !!window.tron,
-      tronKeys: window.tron ? Object.keys(window.tron) : null,
-
-      hasTronLink: !!window.tronLink,
-      tronLinkKeys: window.tronLink ? Object.keys(window.tronLink) : null
+      hasEthereum: !!window.ethereum,
+      ethereumChainId: window.ethereum ? window.ethereum.chainId : null,
+      ethereumSelectedAddress: window.ethereum ? window.ethereum.selectedAddress : null
     };
 
+    try {
+      const addr = getCurrentTronAddress();
+      document.getElementById("tronAddress").value = addr;
+      info.currentTronAddress = addr;
+    } catch (e) {
+      info.currentTronAddressError = e.message || String(e);
+    }
+
     log("环境检测结果:", info);
+  }
+
+  async function buildSelfTransferTx() {
+    try {
+      const tronWeb = getTronWeb();
+      const from = getCurrentTronAddress();
+      const to = document.getElementById("tronAddress").value.trim() || from;
+      const amountSun = 1;
+
+      log("开始构造 TRON 自转账交易:", {
+        from,
+        to,
+        amountSun
+      });
+
+      const tx = await tronWeb.transactionBuilder.sendTrx(
+        to,
+        amountSun,
+        from
+      );
+
+      document.getElementById("txBox").value = JSON.stringify(tx, null, 2);
+
+      log("✅ 构造成功，交易对象:", tx);
+
+      if (tx.raw_data && tx.raw_data_hex) {
+        log("✅ 交易包含 raw_data 和 raw_data_hex");
+      } else {
+        log("⚠️ 交易缺少 raw_data 或 raw_data_hex");
+      }
+
+    } catch (e) {
+      log("❌ 构造交易失败:", {
+        message: e.message || String(e),
+        raw: String(e)
+      });
+    }
+  }
+
+  async function testSignTransaction(mode) {
+    try {
+      const tx = getTxFromBox();
+      const payload = wrapTx(tx, mode);
+
+      await callNative("tron.signTransaction", payload);
+
+    } catch (e) {
+      log("❌ 测试 tron.signTransaction 准备失败:", e.message || String(e));
+    }
+  }
+
+  async function testSendTransaction(mode) {
+    const yes = confirm(
+      "你正在测试 tron.sendTransaction。\n\n" +
+      "如果这个接口内部会签名并广播，可能产生真实链上交易。\n" +
+      "本页面默认是自己转给自己 1 SUN。\n\n" +
+      "确定继续？"
+    );
+
+    if (!yes) {
+      log("用户取消 tron.sendTransaction 测试");
+      return;
+    }
+
+    try {
+      const tx = getTxFromBox();
+      const payload = wrapTx(tx, mode);
+
+      await callNative("tron.sendTransaction", payload);
+
+    } catch (e) {
+      log("❌ 测试 tron.sendTransaction 准备失败:", e.message || String(e));
+    }
+  }
+
+  async function testSignMessage(mode) {
+    try {
+      const payload = wrapMessage(mode);
+
+      await callNative("tron.signMessage", payload);
+
+    } catch (e) {
+      log("❌ 测试 tron.signMessage 准备失败:", e.message || String(e));
+    }
+  }
+
+  async function testBroadcastInvalid() {
+    const yes = confirm(
+      "只测试 tron.broadcastTransaction 空对象。\n\n" +
+      "不会传真实签名交易。\n\n" +
+      "确定继续？"
+    );
+
+    if (!yes) return;
+
+    await callNative("tron.broadcastTransaction", {});
+  }
+
+  async function copyLog() {
+    const text = document.getElementById("log").textContent;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("日志已复制");
+    } catch (e) {
+      alert("复制失败，请手动长按复制日志");
+    }
   }
 
   detectEnv();
