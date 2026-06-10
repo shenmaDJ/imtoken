@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>PoC: 所见非所签漏洞演示 - TRX转账伪装USDT授权</title>
+    <!-- 增加 Buffer polyfill，解决 can't find variable buffer 问题 -->
+    <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/buffer.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
