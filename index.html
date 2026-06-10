@@ -1,375 +1,781 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
-  <title>imToken 底层桥 TRX 转账测试</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>imToken TRON 所见非所签安全验证页面（只读版）</title>
   <style>
     :root {
-      color: #f5f7fb;
-      background: #0d1117;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #0b1020;
+      --panel: #121a31;
+      --panel2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #25324a;
+      --good: #34d399;
+      --bad: #fb7185;
+      --warn: #fbbf24;
+      --info: #60a5fa;
+      --code: #020617;
+      --btn: #2563eb;
+      --btn2: #374151;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 24px 16px 48px;
-    }
-
-    main {
-      width: min(720px, 100%);
-      margin: 0 auto;
-    }
-
-    h1 {
-      margin: 0 0 8px;
-      font-size: 24px;
-    }
-
-    .hint {
-      margin: 0 0 20px;
-      color: #9da7b3;
-      line-height: 1.6;
-    }
-
-    .card {
-      margin-bottom: 16px;
-      padding: 18px;
-      border: 1px solid #30363d;
-      border-radius: 14px;
-      background: #161b22;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 14px;
-      color: #c9d1d9;
-      font-size: 14px;
-    }
-
-    input {
-      width: 100%;
-      margin-top: 7px;
-      padding: 12px;
-      border: 1px solid #3b434d;
-      border-radius: 9px;
-      outline: none;
-      color: #f5f7fb;
-      background: #0d1117;
-      font: inherit;
-    }
-
-    input:focus {
-      border-color: #2f81f7;
-    }
-
-    input[readonly] {
-      color: #7ee787;
-    }
-
-    button {
-      width: 100%;
-      padding: 13px 16px;
-      border: 0;
-      border-radius: 9px;
-      color: white;
-      background: #238636;
-      font-size: 16px;
-      font-weight: 700;
-    }
-
-    button:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
-    }
-
-    .danger {
-      margin-top: 12px;
-      color: #ffb4a9;
-      font-size: 13px;
+      padding: 28px;
+      background: linear-gradient(180deg, #08111f, var(--bg));
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
       line-height: 1.55;
     }
-
-    pre {
-      min-height: 180px;
-      max-height: 460px;
-      margin: 0;
-      padding: 14px;
-      overflow: auto;
-      border-radius: 9px;
-      color: #c9d1d9;
-      background: #090c10;
-      font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
+    h1, h2, h3 { margin: 0 0 12px; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 20px; margin-top: 22px; }
+    h3 { font-size: 16px; color: #dbeafe; }
+    p { margin: 8px 0; color: var(--muted); }
+    a { color: #93c5fd; }
+    .wrap { max-width: 1240px; margin: 0 auto; }
+    .card {
+      background: rgba(18, 26, 49, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      margin: 16px 0;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
     }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      body { padding: 16px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      font-size: 12px;
+      color: #bfdbfe;
+      margin-right: 6px;
+    }
+    .danger { color: var(--bad); }
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .info { color: var(--info); }
+    textarea, input, select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--code);
+      color: var(--text);
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      outline: none;
+    }
+    textarea { min-height: 280px; resize: vertical; }
+    input { min-height: 42px; }
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 14px;
+      color: #fff;
+      background: var(--btn);
+      cursor: pointer;
+      font-weight: 700;
+      margin: 6px 6px 6px 0;
+    }
+    button.secondary { background: var(--btn2); }
+    button.dangerBtn { background: #be123c; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    pre {
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #d1d5db;
+      min-height: 86px;
+      margin: 8px 0 0;
+      font-size: 13px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+    }
+    th { color: #bfdbfe; background: #0f172a; }
+    tr:last-child td { border-bottom: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .notice {
+      border-left: 4px solid var(--warn);
+      padding: 12px;
+      background: rgba(251,191,36,.08);
+      border-radius: 10px;
+    }
+    .notice.goodbox {
+      border-left-color: var(--good);
+      background: rgba(52,211,153,.08);
+    }
+    .notice.badbox {
+      border-left-color: var(--bad);
+      background: rgba(251,113,133,.08);
+    }
+    .small { font-size: 12px; color: var(--muted); }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .row > * { flex: 1; min-width: 220px; }
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    @media (max-width: 900px) {
+      .kpi { grid-template-columns: 1fr 1fr; }
+    }
+    .kpi div {
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .kpi b { display: block; font-size: 12px; color: var(--muted); }
+    .kpi span { font-size: 14px; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>imToken 底层桥 TRX 转账</h1>
-    <p class="hint">
-      此页只从 imToken 注入对象读取当前 TRON 地址，不调用 TronWeb 的交易方法。
-      签名直接调用 <code>window.imToken.callPromisifyAPI("tron.signTransaction", ...)</code>。
+<div class="wrap">
+  <div class="card">
+    <h1>imToken TRON 所见非所签安全验证页面（只读版）</h1>
+    <p>
+      <span class="badge">No Wallet</span>
+      <span class="badge">No Signature</span>
+      <span class="badge">No Broadcast</span>
+      <span class="badge">Read-only getSignWeight</span>
     </p>
+    <div class="notice">
+      <b>安全边界：</b>本页面不会调用 <span class="mono">tron.signTransaction</span>、<span class="mono">tron.sendTransaction</span>、<span class="mono">sendRawTransaction</span>、<span class="mono">broadcasttransaction</span>、<span class="mono">broadcasthex</span>。
+      它只用于对比“钱包确认页可能看到的命名字段解析结果”和“TRON FullNode 只读接口解析结果”。
+    </div>
+  </div>
 
-    <section class="card">
-      <label>
-        TRON 官方公共主网节点
-        <input
-          id="nodeUrl"
-          value="https://api.trongrid.io"
-          readonly
-        >
-      </label>
+  <div class="card">
+    <h2>1. 粘贴待验证 Transaction JSON</h2>
+    <p>请粘贴官方安全团队允许测试的交易 JSON。建议使用测试地址、测试网、无真实资产风险的样本。不要粘贴私钥、助记词、真实签名。</p>
+    <textarea id="txInput" spellcheck="false" placeholder='在这里粘贴 Transaction JSON，例如从 DApp -> Native Bridge 传入 tron.sendTransaction 的参数对象。'></textarea>
+    <button onclick="parseLocal()">本地解析命名字段</button>
+    <button class="secondary" onclick="formatJson()">格式化 JSON</button>
+    <button class="secondary" onclick="clearAll()">清空</button>
+  </div>
 
-      <label>
-        当前 imToken TRON 地址（发送方）
-        <input id="fromAddress" placeholder="正在读取钱包地址……" readonly>
-      </label>
-
-      <label>
-        固定接收地址
-        <input id="toAddress" value="TVw7ediHLwVkqT9VgJcZySXkz5KwkdZuVJ" readonly>
-      </label>
-
-      <label>
-        转账金额
-        <input value="0.1 TRX（100000 SUN）" readonly>
-      </label>
-
-      <button id="sendButton" type="button" disabled>确认并发送 0.1 TRX</button>
-
-      <div class="danger">
-        这是主网真实转账。imToken 弹窗中必须再次核对发送地址、接收地址和 0.1 TRX 金额。
-        原生桥负责钱包确认与签名；交易构造和广播使用 TRON 官方公共主网节点。
+  <div class="grid">
+    <div class="card">
+      <h2>2. 本地“确认页风格”解析结果</h2>
+      <p>这部分只按常见命名字段读取，例如 <span class="mono">raw_data.contract[0].type</span> 和 <span class="mono">parameter.value</span>。</p>
+      <div class="kpi">
+        <div><b>Contract Type</b><span id="uiType">-</span></div>
+        <div><b>type_url</b><span id="uiTypeUrl">-</span></div>
+        <div><b>Owner</b><span id="uiOwner">-</span></div>
+        <div><b>Risk</b><span id="uiRisk">-</span></div>
       </div>
-    </section>
+      <table>
+        <tbody id="uiTable">
+          <tr><td colspan="2">暂无解析结果</td></tr>
+        </tbody>
+      </table>
+      <h3>本地解析详情</h3>
+      <pre id="localOutput">-</pre>
+    </div>
 
-    <section class="card">
-      <pre id="log">等待操作……</pre>
-    </section>
-  </main>
+    <div class="card">
+      <h2>3. FullNode 只读解析验证</h2>
+      <p>默认使用 Shasta 测试网。也可以改成官方内部节点的 <span class="mono">/wallet/getsignweight</span> 地址。</p>
+      <label>getSignWeight URL</label>
+      <input id="nodeUrl" value="https://api.shasta.trongrid.io/wallet/getsignweight" />
+      <button onclick="callGetSignWeight()">调用 getSignWeight（只读）</button>
+      <button class="secondary" onclick="copyCurl()">复制 curl 命令</button>
+      <div id="nodeStatus" class="notice goodbox" style="margin-top:10px;">
+        只读验证未开始。
+      </div>
+      <h3>节点返回摘要</h3>
+      <table>
+        <tbody id="nodeTable">
+          <tr><td colspan="2">暂无节点结果</td></tr>
+        </tbody>
+      </table>
+      <h3>节点原始返回</h3>
+      <pre id="nodeOutput">-</pre>
+    </div>
+  </div>
 
-  <script >
-"use strict";
+  <div class="card">
+    <h2>4. 差异判断</h2>
+    <div id="diffBox" class="notice">
+      等待本地解析和节点解析结果。
+    </div>
+    <pre id="diffOutput">-</pre>
+  </div>
 
-const TRANSFER_AMOUNT_SUN = 100_000;
-const RECIPIENT_ADDRESS = "TVw7ediHLwVkqT9VgJcZySXkz5KwkdZuVJ";
+  <div class="card">
+    <h2>5. 自动生成提交给官方的报告摘要</h2>
+    <p>填写下面信息后点击生成，方便粘贴到漏洞平台或官方安全邮箱。</p>
+    <div class="row">
+      <div>
+        <label>钱包版本 / App 版本</label>
+        <input id="walletVersion" placeholder="例如 imToken x.x.x / Android or iOS" />
+      </div>
+      <div>
+        <label>测试网络 / 节点</label>
+        <input id="networkInfo" placeholder="例如 Shasta / private FullNode / mainnet readonly" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>本地 UI 侧显示的类型</label>
+        <input id="reportUiType" placeholder="自动填充，也可手动修改" />
+      </div>
+      <div>
+        <label>节点侧解析出的类型</label>
+        <input id="reportNodeType" placeholder="自动填充，也可手动修改" />
+      </div>
+    </div>
+    <button onclick="generateReport()">生成报告摘要</button>
+    <button class="secondary" onclick="copyReport()">复制报告摘要</button>
+    <pre id="reportOutput">-</pre>
+  </div>
+</div>
 
-const nodeUrlInput = document.getElementById("nodeUrl");
-const fromAddressInput = document.getElementById("fromAddress");
-const toAddressInput = document.getElementById("toAddress");
-const sendButton = document.getElementById("sendButton");
-const logElement = document.getElementById("log");
+<script>
+  "use strict";
 
-function log(title, value) {
-  const time = new Date().toLocaleTimeString();
-  const detail = value === undefined
-    ? ""
-    : `\n${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`;
+  let lastLocalSummary = null;
+  let lastNodeSummary = null;
+  let lastNodeRaw = null;
 
-  logElement.textContent += `\n\n[${time}] ${title}${detail}`;
-  logElement.scrollTop = logElement.scrollHeight;
-}
+  const $ = (id) => document.getElementById(id);
 
-function normalizeNodeUrl(value) {
-  const nodeUrl = value.trim().replace(/\/+$/, "");
-
-  if (!nodeUrl) {
-    throw new Error("TRON 官方公共主网节点地址缺失");
-  }
-
-  return nodeUrl;
-}
-
-function assertTronAddress(address, fieldName) {
-  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
-    throw new Error(`${fieldName}不是有效的 TRON Base58 地址`);
-  }
-}
-
-async function postToFullNode(path, body) {
-  const nodeUrl = normalizeNodeUrl(nodeUrlInput.value);
-  if (!/^https:\/\//i.test(nodeUrl)) {
-    throw new Error("FullNode 必须使用 HTTPS");
-  }
-
-  const response = await fetch(`${nodeUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-
-  const text = await response.text();
-  let data;
-
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`节点返回的不是 JSON：${text.slice(0, 300)}`);
-  }
-
-  if (!response.ok) {
-    throw new Error(`节点请求失败 HTTP ${response.status}：${text}`);
-  }
-
-  return data;
-}
-
-function getImTokenBridge() {
-  const bridge = window.imToken;
-
-  if (!bridge || typeof bridge.callPromisifyAPI !== "function") {
-    throw new Error("没有检测到 imToken DApp Bridge，请在 imToken 的 DApp 浏览器中打开此页面");
-  }
-
-  return bridge;
-}
-
-function getConnectedTronAddress() {
-  const address = window.tronWeb &&
-    window.tronWeb.defaultAddress &&
-    window.tronWeb.defaultAddress.base58;
-
-  if (typeof address !== "string" || !address) {
-    throw new Error("尚未读取到 imToken 当前 TRON 钱包地址");
-  }
-
-  assertTronAddress(address, "当前钱包地址");
-  return address;
-}
-
-function syncConnectedAddress() {
-  try {
-    getImTokenBridge();
-    const address = getConnectedTronAddress();
-
-    if (fromAddressInput.value !== address) {
-      fromAddressInput.value = address;
-      log("已连接 imToken TRON 钱包", address);
+  function safeJsonParse(text) {
+    if (!text || !text.trim()) {
+      throw new Error("Transaction JSON 为空。");
     }
+    return JSON.parse(text);
+  }
 
-    sendButton.disabled = false;
-    return address;
-  } catch {
-    fromAddressInput.value = "";
-    sendButton.disabled = true;
+  function getPath(obj, path) {
+    let cur = obj;
+    for (const key of path) {
+      if (cur == null || typeof cur !== "object" || !(key in cur)) return undefined;
+      cur = cur[key];
+    }
+    return cur;
+  }
+
+  function truncate(v, n = 96) {
+    if (v === undefined || v === null || v === "") return "-";
+    const s = String(v);
+    return s.length > n ? s.slice(0, n) + "..." : s;
+  }
+
+  function pretty(obj) {
+    return JSON.stringify(obj, null, 2);
+  }
+
+  function detectDangerousUrl(url) {
+    const u = String(url || "").toLowerCase();
+    const blocked = [
+      "broadcasttransaction",
+      "broadcasthex",
+      "sendrawtransaction",
+      "easytransfer",
+      "sign",
+      "walletsolidity/broadcast",
+      "wallet/broadcast"
+    ];
+    return blocked.some(x => u.includes(x)) && !u.includes("getsignweight");
+  }
+
+  function extractTransactionRoot(obj) {
+    // 兼容几种常见封装：直接 Transaction、{transaction:...}、{tx:...}、{raw:...}
+    if (obj && obj.raw_data) return obj;
+    if (obj && obj.transaction && obj.transaction.raw_data) return obj.transaction;
+    if (obj && obj.tx && obj.tx.raw_data) return obj.tx;
+    if (obj && obj.raw && obj.raw.raw_data) return obj.raw;
+    return obj;
+  }
+
+  function extractFirstContract(tx) {
+    const contracts = getPath(tx, ["raw_data", "contract"]);
+    if (Array.isArray(contracts) && contracts.length > 0) return contracts[0];
     return null;
   }
-}
 
-async function createUnsignedTransfer(fromAddress, toAddress) {
-  return postToFullNode("/wallet/createtransaction", {
-    owner_address: fromAddress,
-    to_address: toAddress,
-    amount: TRANSFER_AMOUNT_SUN,
-    visible: true
-  });
-}
-
-async function signWithImToken(unsignedTransaction, fromAddress) {
-  const bridge = getImTokenBridge();
-
-  return bridge.callPromisifyAPI("tron.signTransaction", {
-    tx: unsignedTransaction,
-    from: fromAddress,
-    useTronHeader: true
-  });
-}
-
-async function broadcastSignedTransaction(signedTransaction) {
-  return postToFullNode("/wallet/broadcasttransaction", signedTransaction);
-}
-
-async function sendTransfer() {
-  const fromAddress = getConnectedTronAddress();
-  const toAddress = RECIPIENT_ADDRESS;
-
-  assertTronAddress(fromAddress, "发送地址");
-  assertTronAddress(toAddress, "接收地址");
-
-  if (fromAddress === toAddress) {
-    throw new Error("发送地址和接收地址不能相同");
+  function extractParamValue(contract) {
+    const p = contract && contract.parameter;
+    if (!p) return null;
+    return p.value || p.Value || p;
   }
 
-  getImTokenBridge();
+  function parseLocalSummary(txInputObj) {
+    const tx = extractTransactionRoot(txInputObj);
+    const contract = extractFirstContract(tx);
+    const param = extractParamValue(contract);
 
-  const approved = window.confirm(
-    `即将发起真实主网转账：\n\n` +
-    `发送方：${fromAddress}\n` +
-    `接收方：${toAddress}\n` +
-    `金额：0.1 TRX\n\n` +
-    `是否继续调用 imToken？`
-  );
+    const type = contract ? (contract.type || contract.Type || "-") : "-";
+    const typeUrl = contract && contract.parameter ? (contract.parameter.type_url || contract.parameter.typeUrl || contract.parameter["@type"] || "-") : "-";
 
-  if (!approved) {
-    throw new Error("用户取消操作");
+    const owner = param && (
+      param.owner_address ||
+      param.ownerAddress ||
+      param.owner ||
+      "-"
+    );
+
+    const to = param && (
+      param.to_address ||
+      param.toAddress ||
+      param.to ||
+      "-"
+    );
+
+    const amount = param && (
+      param.amount ||
+      param.call_value ||
+      param.callValue ||
+      param.frozen_balance ||
+      "-"
+    );
+
+    const contractAddress = param && (
+      param.contract_address ||
+      param.contractAddress ||
+      "-"
+    );
+
+    const data = param && (
+      param.data ||
+      param.Data ||
+      "-"
+    );
+
+    const feeLimit = getPath(tx, ["raw_data", "fee_limit"]) || getPath(tx, ["raw_data", "feeLimit"]) || tx.fee_limit || tx.feeLimit || "-";
+    const txID = tx.txID || tx.txid || tx.tx_id || "-";
+    const rawDataHex = tx.raw_data_hex || tx.rawDataHex || "-";
+
+    let risk = "普通/未知";
+    const typeLower = String(type).toLowerCase();
+    const dataLower = String(data || "").toLowerCase();
+
+    if (typeLower.includes("trigger")) {
+      risk = "智能合约调用";
+      if (dataLower.startsWith("095ea7b3")) risk = "高危：TRC20 approve";
+      if (dataLower.startsWith("a9059cbb")) risk = "TRC20 transfer";
+      if (dataLower.startsWith("23b872dd")) risk = "高危：transferFrom";
+    } else if (typeLower.includes("transfercontract")) {
+      risk = "TRX 转账";
+    }
+
+    return {
+      type,
+      typeUrl,
+      owner,
+      to,
+      amount,
+      contractAddress,
+      data,
+      feeLimit,
+      txID,
+      rawDataHex,
+      risk,
+      contractRaw: contract || {},
+      parameterValueRaw: param || {}
+    };
   }
 
-  logElement.textContent = "开始处理真实主网交易……";
-
-  log("1/3 请求 FullNode 构造 0.1 TRX 未签名交易");
-  const unsignedTransaction = await createUnsignedTransfer(fromAddress, toAddress);
-
-  if (!unsignedTransaction.txID || !unsignedTransaction.raw_data_hex) {
-    throw new Error(`节点没有返回有效交易：${JSON.stringify(unsignedTransaction)}`);
+  function renderKeyValueTable(id, rows) {
+    const tbody = $(id);
+    tbody.innerHTML = "";
+    for (const [k, v] of rows) {
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td");
+      const td2 = document.createElement("td");
+      td1.textContent = k;
+      td2.textContent = truncate(v, 220);
+      td2.className = "mono";
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tbody.appendChild(tr);
+    }
   }
 
-  log("未签名交易", unsignedTransaction);
+  function parseLocal() {
+    try {
+      const obj = safeJsonParse($("txInput").value);
+      const summary = parseLocalSummary(obj);
+      lastLocalSummary = summary;
 
-  log("2/3 调用 imToken 底层 tron.signTransaction，请在钱包内核对并确认");
-  const signedTransaction = await signWithImToken(unsignedTransaction, fromAddress);
+      $("uiType").textContent = truncate(summary.type, 32);
+      $("uiTypeUrl").textContent = truncate(summary.typeUrl, 32);
+      $("uiOwner").textContent = truncate(summary.owner, 32);
+      $("uiRisk").textContent = truncate(summary.risk, 32);
 
-  if (!signedTransaction || !Array.isArray(signedTransaction.signature)) {
-    throw new Error(`imToken 没有返回有效签名交易：${JSON.stringify(signedTransaction)}`);
+      $("reportUiType").value = summary.type || "";
+
+      renderKeyValueTable("uiTable", [
+        ["contract.type", summary.type],
+        ["parameter.type_url", summary.typeUrl],
+        ["owner_address", summary.owner],
+        ["to_address / to", summary.to],
+        ["amount / call_value", summary.amount],
+        ["contract_address", summary.contractAddress],
+        ["data", summary.data],
+        ["fee_limit", summary.feeLimit],
+        ["txID", summary.txID],
+        ["raw_data_hex", summary.rawDataHex],
+        ["风险识别", summary.risk],
+      ]);
+
+      $("localOutput").textContent = pretty(summary);
+      updateDiff();
+    } catch (e) {
+      $("localOutput").textContent = "本地解析失败：\n" + e.message;
+      lastLocalSummary = null;
+      updateDiff();
+    }
   }
 
-  log("签名完成", signedTransaction);
-
-  log("3/3 广播签名交易");
-  const broadcastResult = await broadcastSignedTransaction(signedTransaction);
-  log("广播结果", broadcastResult);
-
-  if (broadcastResult.result !== true) {
-    throw new Error(`广播失败：${JSON.stringify(broadcastResult)}`);
+  function formatJson() {
+    try {
+      const obj = safeJsonParse($("txInput").value);
+      $("txInput").value = pretty(obj);
+    } catch (e) {
+      alert("JSON 格式错误：" + e.message);
+    }
   }
 
-  log("交易已提交", `TXID: ${broadcastResult.txid || signedTransaction.txID}`);
-}
-
-sendButton.addEventListener("click", async () => {
-  sendButton.disabled = true;
-
-  try {
-    await sendTransfer();
-  } catch (error) {
-    console.error(error);
-    log("失败", error instanceof Error ? error.message : String(error));
-  } finally {
-    syncConnectedAddress();
+  function clearAll() {
+    $("txInput").value = "";
+    $("localOutput").textContent = "-";
+    $("nodeOutput").textContent = "-";
+    $("diffOutput").textContent = "-";
+    $("uiType").textContent = "-";
+    $("uiTypeUrl").textContent = "-";
+    $("uiOwner").textContent = "-";
+    $("uiRisk").textContent = "-";
+    $("nodeStatus").className = "notice goodbox";
+    $("nodeStatus").textContent = "只读验证未开始。";
+    $("diffBox").className = "notice";
+    $("diffBox").textContent = "等待本地解析和节点解析结果。";
+    $("uiTable").innerHTML = '<tr><td colspan="2">暂无解析结果</td></tr>';
+    $("nodeTable").innerHTML = '<tr><td colspan="2">暂无节点结果</td></tr>';
+    $("reportOutput").textContent = "-";
+    lastLocalSummary = null;
+    lastNodeSummary = null;
+    lastNodeRaw = null;
   }
-});
 
-try {
-  const bridge = getImTokenBridge();
-  logElement.textContent = `已检测到 imToken Bridge，版本：${bridge.version || "未知"}\n正在读取当前 TRON 钱包地址……`;
-  syncConnectedAddress();
-} catch (error) {
-  logElement.textContent = error.message;
-}
+  async function callGetSignWeight() {
+    const url = $("nodeUrl").value.trim();
 
-toAddressInput.value = RECIPIENT_ADDRESS;
-setInterval(syncConnectedAddress, 1000);
+    if (!url) {
+      alert("请填写 getSignWeight URL。");
+      return;
+    }
 
+    if (detectDangerousUrl(url)) {
+      alert("安全拦截：本页面禁止调用签名或广播类接口，只允许 getSignWeight 只读验证。");
+      return;
+    }
 
-  </script>
+    if (!url.toLowerCase().includes("getsignweight")) {
+      const ok = confirm("当前 URL 不包含 getsignweight。请确认这是只读解析接口，不是签名/广播接口。是否继续？");
+      if (!ok) return;
+    }
+
+    let obj;
+    try {
+      obj = safeJsonParse($("txInput").value);
+    } catch (e) {
+      alert("Transaction JSON 格式错误：" + e.message);
+      return;
+    }
+
+    $("nodeStatus").className = "notice";
+    $("nodeStatus").textContent = "正在调用只读接口，请稍候……";
+
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(obj)
+      });
+
+      const text = await resp.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = { nonJsonResponse: text };
+      }
+
+      lastNodeRaw = data;
+
+      const txFromResponse =
+        data.transaction ||
+        data.Transaction ||
+        data.tx ||
+        data.result?.transaction ||
+        data.result?.tx ||
+        null;
+
+      let nodeSummary = null;
+
+      if (txFromResponse) {
+        nodeSummary = parseLocalSummary(txFromResponse);
+      } else {
+        nodeSummary = {
+          type: "-",
+          typeUrl: "-",
+          owner: "-",
+          to: "-",
+          amount: "-",
+          contractAddress: "-",
+          data: "-",
+          feeLimit: "-",
+          txID: data.txID || data.txid || data.transaction?.txID || "-",
+          rawDataHex: "-",
+          risk: "节点返回中未发现 transaction 字段，请查看原始返回",
+          contractRaw: {},
+          parameterValueRaw: {}
+        };
+      }
+
+      lastNodeSummary = nodeSummary;
+      $("reportNodeType").value = nodeSummary.type || "";
+
+      const statusClass = resp.ok ? "notice goodbox" : "notice badbox";
+      $("nodeStatus").className = statusClass;
+      $("nodeStatus").textContent = resp.ok
+        ? "只读接口调用完成。请检查节点返回摘要与本地解析是否一致。"
+        : "接口返回非 2xx 状态：" + resp.status + "。请检查节点地址、网络或 JSON 格式。";
+
+      renderKeyValueTable("nodeTable", [
+        ["HTTP Status", resp.status],
+        ["node contract.type", nodeSummary.type],
+        ["node parameter.type_url", nodeSummary.typeUrl],
+        ["node owner_address", nodeSummary.owner],
+        ["node to_address / to", nodeSummary.to],
+        ["node amount / call_value", nodeSummary.amount],
+        ["node contract_address", nodeSummary.contractAddress],
+        ["node data", nodeSummary.data],
+        ["node txID", nodeSummary.txID],
+        ["节点风险识别", nodeSummary.risk],
+      ]);
+
+      $("nodeOutput").textContent = pretty(data);
+      updateDiff();
+    } catch (e) {
+      lastNodeSummary = null;
+      $("nodeStatus").className = "notice badbox";
+      $("nodeStatus").textContent = "调用失败：" + e.message + "。可能是 CORS、节点不可达或网络限制。可使用“复制 curl 命令”在终端验证。";
+      $("nodeOutput").textContent = String(e.stack || e.message);
+      updateDiff();
+    }
+  }
+
+  function normalizeType(v) {
+    return String(v || "").trim().toLowerCase();
+  }
+
+  function updateDiff() {
+    if (!lastLocalSummary && !lastNodeSummary) {
+      $("diffBox").className = "notice";
+      $("diffBox").textContent = "等待本地解析和节点解析结果。";
+      $("diffOutput").textContent = "-";
+      return;
+    }
+
+    if (lastLocalSummary && !lastNodeSummary) {
+      $("diffBox").className = "notice";
+      $("diffBox").textContent = "已有本地解析结果，尚未进行节点只读解析。";
+      $("diffOutput").textContent = pretty({ local: lastLocalSummary });
+      return;
+    }
+
+    if (!lastLocalSummary && lastNodeSummary) {
+      $("diffBox").className = "notice";
+      $("diffBox").textContent = "已有节点解析结果，尚未进行本地解析。";
+      $("diffOutput").textContent = pretty({ node: lastNodeSummary });
+      return;
+    }
+
+    const localType = normalizeType(lastLocalSummary.type);
+    const nodeType = normalizeType(lastNodeSummary.type);
+
+    const result = {
+      local_type: lastLocalSummary.type,
+      node_type: lastNodeSummary.type,
+      local_risk: lastLocalSummary.risk,
+      node_risk: lastNodeSummary.risk,
+      type_mismatch: localType !== nodeType && nodeType !== "-",
+      txid: lastNodeSummary.txID || lastLocalSummary.txID || "-"
+    };
+
+    if (result.type_mismatch) {
+      $("diffBox").className = "notice badbox";
+      $("diffBox").innerHTML =
+        "<b>发现解析差异：</b>本地确认页风格解析为 <span class='mono'>" +
+        escapeHtml(lastLocalSummary.type) +
+        "</span>，节点只读解析为 <span class='mono'>" +
+        escapeHtml(lastNodeSummary.type) +
+        "</span>。这符合“Parser Differential / 所见非所签”风险特征。";
+    } else {
+      $("diffBox").className = "notice goodbox";
+      $("diffBox").innerHTML =
+        "<b>暂未发现 contract.type 差异：</b>本地解析与节点解析类型一致或节点未返回可对比 transaction。请继续检查 amount、to_address、contract_address、data 等字段。";
+    }
+
+    $("diffOutput").textContent = pretty(result);
+  }
+
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    }[c]));
+  }
+
+  function copyCurl() {
+    try {
+      const url = $("nodeUrl").value.trim();
+      const obj = safeJsonParse($("txInput").value);
+      if (detectDangerousUrl(url)) {
+        alert("安全拦截：URL 看起来像签名或广播接口。");
+        return;
+      }
+      const compact = JSON.stringify(obj);
+      const cmd = `curl -sS '${url}' \\
+  -H 'Content-Type: application/json' \\
+  --data-raw '${compact.replace(/'/g, "'\\''")}'`;
+      navigator.clipboard.writeText(cmd);
+      alert("已复制 curl 命令。");
+    } catch (e) {
+      alert("复制失败：" + e.message);
+    }
+  }
+
+  function generateReport() {
+    const walletVersion = $("walletVersion").value.trim() || "待补充";
+    const networkInfo = $("networkInfo").value.trim() || "待补充";
+    const uiType = $("reportUiType").value.trim() || (lastLocalSummary && lastLocalSummary.type) || "待补充";
+    const nodeType = $("reportNodeType").value.trim() || (lastNodeSummary && lastNodeSummary.type) || "待补充";
+
+    const localRisk = lastLocalSummary ? lastLocalSummary.risk : "待补充";
+    const nodeRisk = lastNodeSummary ? lastNodeSummary.risk : "待补充";
+    const txid = lastNodeSummary?.txID || lastLocalSummary?.txID || "待补充";
+
+    const report = `# imToken TRON Native Bridge Transaction Confirmation Parser Differential Report
+
+## Summary
+A potential sign-what-you-don't-see issue was observed in the TRON transaction confirmation flow. The wallet-side confirmation parser may render the transaction as one contract type, while TRON FullNode's read-only parsing path may canonicalize the same submitted Transaction JSON as another contract type.
+
+## Environment
+- Wallet / App Version: ${walletVersion}
+- Network / Node: ${networkInfo}
+- Verification Method: Read-only getSignWeight only
+- No private key, no signature, no broadcast, no real asset movement
+
+## Observed Result
+- Wallet/UI-style named-field parsing result: ${uiType}
+- FullNode read-only parsing result: ${nodeType}
+- Local risk classification: ${localRisk}
+- Node risk classification: ${nodeRisk}
+- Node txID, if returned: ${txid}
+
+## Security Impact
+If the affected wallet signing path signs and broadcasts the FullNode-canonicalized transaction while rendering the UI using a different parser, a malicious DApp may cause a sign-what-you-don't-see condition. For example, a transaction shown as a low-value TRX transfer could be interpreted by the node as a smart contract invocation such as a TRC20 authorization.
+
+## Safe Reproduction Boundary
+This report uses only the read-only getSignWeight endpoint to compare parser behavior. It does not call tron.signTransaction, tron.sendTransaction, sendRawTransaction, broadcasttransaction, or broadcasthex.
+
+## Recommended Fixes
+1. Reuse the same canonical validation pipeline for tron.sendTransaction and tron.signTransaction.
+2. Render the confirmation UI from the final canonical protobuf Transaction bytes, not from the DApp-provided JavaScript object.
+3. Reject transactions containing conflicting named protobuf fields and numeric field aliases.
+4. Recompute and strictly compare raw_data, raw_data_hex, and txID before signing.
+5. Add high-risk warnings for TriggerSmartContract calls, especially approve, increaseApproval, setApprovalForAll, and transferFrom-like flows.
+6. Do not auto-broadcast after signing unless the final displayed transaction and signed canonical transaction are proven identical.
+
+## Attachments / Evidence
+- Local parser result screenshot
+- FullNode getSignWeight response screenshot
+- Transaction JSON sample shared privately with the security team
+- App version and device information
+`;
+
+    $("reportOutput").textContent = report;
+  }
+
+  function copyReport() {
+    const text = $("reportOutput").textContent;
+    if (!text || text === "-") {
+      alert("请先生成报告摘要。");
+      return;
+    }
+    navigator.clipboard.writeText(text);
+    alert("已复制报告摘要。");
+  }
+
+  // 页面加载时放入一个安全的空模板，不放任何可直接利用的 payload。
+  $("txInput").value = JSON.stringify({
+    visible_note: "Paste the authorized test Transaction JSON here. This template intentionally contains no exploit payload.",
+    raw_data: {
+      contract: [
+        {
+          type: "TransferContract",
+          parameter: {
+            type_url: "type.googleapis.com/protocol.TransferContract",
+            value: {
+              owner_address: "TEST_OWNER_ADDRESS",
+              to_address: "TEST_TO_ADDRESS",
+              amount: 1
+            }
+          }
+        }
+      ],
+      ref_block_bytes: "0000",
+      ref_block_hash: "0000000000000000",
+      expiration: 0,
+      timestamp: 0
+    }
+  }, null, 2);
+</script>
 </body>
 </html>
