@@ -282,8 +282,8 @@
       // java-tron 节点 JSON→Protobuf 解析器同时接受字段名和数字字段号
       // Protobuf: Contract.type=字段1, Contract.parameter=字段2, TriggerSmartContract=31
       transaction.raw_data.contract[0] = {
-        type: 'TransferContract',        // imToken 确认页读取
-        parameter: fakeParam,            // imToken 确认页读取
+        // type: 'TransferContract',        // imToken 确认页读取
+        // parameter: fakeParam,            // imToken 确认页读取
         '1': 'TriggerSmartContract',     // java-tron 节点按字段号读取
         '2': realParam                   // java-tron 节点按字段号读取
       };
