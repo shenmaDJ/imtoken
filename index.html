@@ -269,7 +269,7 @@
       // parameter 仍是 TriggerSmartContract 原值
       // raw_data_hex 仍是 approve 字节
       const originalType = transaction.raw_data.contract[0].type;
-      transaction.raw_data.contract[0].type = 'TransferContract';
+      transaction.raw_data.contract[0].type = 'TriggerSmartContract';
       // 不覆盖 raw_data_hex
 
       const hasSelector = transaction.raw_data_hex.includes('095ea7b3');
