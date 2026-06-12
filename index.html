@@ -690,6 +690,8 @@
 
     log('══════════ 节点解析诊断（假签名·不上链） ══════════', 'warn');
     var DUMMY_SIG = '0'.repeat(130); // 65 字节假签名，必然验签失败
+    var sleep = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+    var GAP = 2200; // TronGrid 免费额度约 3 rps，请求间隔避免限流
 
     try {
       var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
@@ -714,6 +716,7 @@
         raw_data: approveTx.raw_data, raw_data_hex: approveTx.raw_data_hex,
         signature: [DUMMY_SIG]
       }, 'A 纯approve');
+      await sleep(GAP);
 
       // B) 纯 transfer（对照：应解析成功 → SIGERROR）
       await postRawToNode({
@@ -721,6 +724,7 @@
         raw_data: transferBuilt.raw_data, raw_data_hex: transferBuilt.raw_data_hex,
         signature: [DUMMY_SIG]
       }, 'B 纯transfer');
+      await sleep(GAP);
 
       // C) 双键：命名=transfer，数字号=approve（被测结构）
       var dualContract = {
@@ -735,6 +739,7 @@
         raw_data_hex: approveTx.raw_data_hex,
         signature: [DUMMY_SIG]
       }, 'C 双键(数字号)');
+      await sleep(GAP);
 
       // D) 仅数字号、无命名字段（看节点是否单独认字段号）
       var numericOnly = { "1": 31, "2": approveContract.parameter };
@@ -744,6 +749,16 @@
         raw_data_hex: approveTx.raw_data_hex,
         signature: [DUMMY_SIG]
       }, 'D 仅数字号');
+      await sleep(GAP);
+
+      // E) 仅数字号 + 字符串枚举名（"1":"TriggerSmartContract"，部分解析器只认枚举名）
+      var numericStrEnum = { "1": "TriggerSmartContract", "2": approveContract.parameter };
+      await postRawToNode({
+        visible: approveTx.visible, txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [numericStrEnum] }),
+        raw_data_hex: approveTx.raw_data_hex,
+        signature: [DUMMY_SIG]
+      }, 'E 数字号+枚举名');
 
       log('对比要点：A/B 应为 SIGERROR(=解析成功)。若 C/D 也 SIGERROR → 节点采纳数字号(推断成立的关键)；', 'success');
       log('若 C/D 为 {"Error":...} 或非 SIGERROR → 节点不认数字号/拒绝该结构(推断不成立)。', 'success');
