@@ -262,14 +262,14 @@ tronWeb.trx.sendRawTransaction(signedTransaction); <span class="hl-c">// ← 广
 // ================================================================
 //  常量 (与报告第 3.2 节一致)
 // ================================================================
-const SURFACE_CONTRACT = 'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax';   // 表层假合约
+const SURFACE_CONTRACT = 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi';   // 表层假合约
 const SURFACE_METHOD   = 'claim()';                              // 表层方法
 const USDT_CONTRACT     = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // TRON USDT (TRC20)
 const USDT_CONTRACT_HEX = '41a614f803b6fd780986a42c78ec9c7f77e6ded13c';
 const ACTUAL_METHOD     = 'increaseApproval(address,uint256)';   // 真实方法
 
-// 报告第 8.2 节：iOS / PC 固定前缀 (12 bytes / 24 hex chars)
-const PARAM_PREFIX = '59bccfbae8597513460f3413';
+// 报告第 8.2 节：iOS / PC 固定前缀 = spender 前 12 bytes / 24 hex chars
+const PARAM_PREFIX = '8f6327d26ab064c299506d6b';
 // 报告第 8.4 节：FF 后缀 (19 bytes / 38 hex chars)
 const PARAM_FF_SUFFIX = 'ffffffffffffffffffffffffffffffffffffff';
 
@@ -415,8 +415,8 @@ dom.paramMode.addEventListener('change', updateParamPreview);
 //  攻击者 / spender 地址 (报告第 8.2 节示例)
 // ================================================================
 const ATTACKER = {
-  hex: '59bccfbae8597513460f34133ffbc173915264b6',
-  b58: 'TJ9hKyrps8okRuVFcdp6nrc6H5dpwSTutD',
+  hex: '8f6327d26ab064c299506d6b82b65475ce1df22e',
+  b58: 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi',
 };
 
 // ================================================================
