@@ -357,7 +357,8 @@ function buildIosPcParam(spenderHex) {
 function buildAndroidParam(spenderHex) {
   // 模拟 config.param — 实际场景中从服务端解密获取
   // 这里使用标准 ABI encode 作为模拟：address(spender) + uint256(MAX)
-  const paddedSpender = '000000000000000000000000' + spenderHex.slice(2);
+  const clean = spenderHex.startsWith('0x') || spenderHex.startsWith('41') ? spenderHex.slice(2) : spenderHex;
+  const paddedSpender = '000000000000000000000000' + clean;
   const maxUint256 = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
   return paddedSpender + maxUint256;
 }
